@@ -2,6 +2,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'audio.dart';
 import 'daily_service.dart';
+import 'puzzle_model.dart';
 import 'puzzle_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -15,6 +16,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   int  _streak      = 0;
   bool _loaded      = false;
   bool _muted       = AudioService.instance.muted;
+  bool _showDev     = false;
 
   late final AnimationController _pulse;
 
@@ -186,14 +188,103 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
               style: TextStyle(
                 color: Color(0xff3a526a), fontSize: 9,
                 fontFamily: 'monospace', letterSpacing: 1)),
-            const SizedBox(height: 20),
+            const SizedBox(height: 8),
+            // Dev/test launcher (discreet; remove before release).
+            GestureDetector(
+              onTap: () { AudioService.instance.ui(); setState(() => _showDev = true); },
+              child: const Padding(
+                padding: EdgeInsets.symmetric(vertical: 6, horizontal: 20),
+                child: Text('· dev ·',
+                  style: TextStyle(
+                    color: Color(0xff2c3e4e), fontSize: 9,
+                    fontFamily: 'monospace', letterSpacing: 3)),
+              ),
+            ),
+            const SizedBox(height: 12),
           ],
             ),
+            if (_showDev) _buildDevOverlay(),
           ],
         ),
       ),
     );
   }
+
+  // ── Dev/test menu: jump straight to a board with a chosen mechanic ─────────
+  void _goDev(Set<PuzzleFeature> features, int level) {
+    AudioService.instance.ui();
+    setState(() => _showDev = false);
+    Navigator.push(context, MaterialPageRoute(
+      builder: (_) => PuzzleScreen(
+        mode: PuzzleMode.infinity,
+        forceFeatures: features,
+        fixedLevel: level)));
+  }
+
+  Widget _buildDevOverlay() => Positioned.fill(
+    child: Container(
+      color: const Color(0xf204050a),
+      child: SafeArea(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Text('DEV · TEST FEATURE',
+              style: TextStyle(
+                color: _gold, fontSize: 16, fontFamily: 'monospace',
+                fontWeight: FontWeight.bold, letterSpacing: 3)),
+            const SizedBox(height: 4),
+            const Text('forces the mechanic on every board',
+              style: TextStyle(
+                color: Color(0xff6688aa), fontSize: 9, fontFamily: 'monospace',
+                letterSpacing: 1)),
+            const SizedBox(height: 24),
+            _devBtn('NORMAL',            const <PuzzleFeature>{}, 4),
+            _devBtn('WORMHOLE',          {PuzzleFeature.wormhole}, 5),
+            _devBtn('MASS GATE',         {PuzzleFeature.massGate}, 8),
+            _devBtn('WORMHOLE + GATE',   {PuzzleFeature.wormhole, PuzzleFeature.massGate}, 9),
+            const SizedBox(height: 20),
+            GestureDetector(
+              onTap: () => setState(() => _showDev = false),
+              child: Container(
+                margin: const EdgeInsets.symmetric(horizontal: 56),
+                padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 40),
+                decoration: BoxDecoration(
+                  color: const Color(0xff0a1018),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: const Color(0xff7799aa), width: 1.2),
+                ),
+                child: const Text('CLOSE',
+                  style: TextStyle(
+                    color: Color(0xff7799aa), fontSize: 12, fontFamily: 'monospace',
+                    fontWeight: FontWeight.bold, letterSpacing: 2)),
+              ),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+
+  Widget _devBtn(String label, Set<PuzzleFeature> f, int level) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 5),
+    child: GestureDetector(
+      onTap: () => _goDev(f, level),
+      child: Container(
+        width: 250,
+        padding: const EdgeInsets.symmetric(vertical: 13, horizontal: 18),
+        decoration: BoxDecoration(
+          color: const Color(0xff0a1018),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: const Color(0xff223344), width: 1.2),
+        ),
+        child: Text(label,
+          textAlign: TextAlign.center,
+          style: const TextStyle(
+            color: Color(0xffaecbe0), fontSize: 12, fontFamily: 'monospace',
+            fontWeight: FontWeight.bold, letterSpacing: 2)),
+      ),
+    ),
+  );
 
   Widget _menuBtn(String label, {
     String? subtitle,

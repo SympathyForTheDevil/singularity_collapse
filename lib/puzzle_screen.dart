@@ -15,7 +15,15 @@ enum PuzzleMode { daily, infinity, zen }
 /// the Black Hole (the final cell) collapses the region into a larger one.
 class PuzzleScreen extends StatefulWidget {
   final PuzzleMode mode;
-  const PuzzleScreen({super.key, this.mode = PuzzleMode.infinity});
+  /// Dev/test overrides: force a specific feature set and a fixed level.
+  final Set<PuzzleFeature>? forceFeatures;
+  final int? fixedLevel;
+  const PuzzleScreen({
+    super.key,
+    this.mode = PuzzleMode.infinity,
+    this.forceFeatures,
+    this.fixedLevel,
+  });
   @override
   State<PuzzleScreen> createState() => _PuzzleScreenState();
 }
@@ -41,12 +49,14 @@ class _PuzzleScreenState extends State<PuzzleScreen>
   late final AnimationController _nudge;   // black-hole "not yet" warning flash
   late final AnimationController _warp;    // wormhole teleport flash
 
-  bool _seenWormhole = false;              // gates the one-time intro hint
+  bool _seenWormhole = false;              // gate the one-time intro hints
+  bool _seenGate     = false;
 
   // Transient in-context hint shown in the NEXT line (e.g. why a move was blocked).
   String?  _hint;
   Timer?   _hintTimer;
-  int      _lastNudgeMs = 0;               // throttle the black-hole nudge
+  int      _lastNudgeMs = 0;               // throttle the nudge
+  int      _nudgeKind   = 0;               // 0 none · 1 black hole · 2 mass gate
 
   double _boardSize = 320;
 
@@ -89,16 +99,27 @@ class _PuzzleScreenState extends State<PuzzleScreen>
   Future<void> _loadSeen() async {
     final p = await SharedPreferences.getInstance();
     _seenWormhole = p.getBool('seen_wormhole') ?? false;
-    if (mounted) _maybeWormholeIntro();
+    _seenGate     = p.getBool('seen_gate') ?? false;
+    if (mounted) _maybeFeatureIntro();
   }
 
-  /// First time a wormhole puzzle appears, explain it once (and remember).
-  void _maybeWormholeIntro() {
-    if (_seenWormhole || grid.wormholes.isEmpty || solved) return;
-    _seenWormhole = true;
-    SharedPreferences.getInstance().then((p) => p.setBool('seen_wormhole', true));
-    _showHint('NEW · WORMHOLE — IN ONE PORTAL, OUT ITS TWIN',
-      duration: const Duration(milliseconds: 4200));
+  /// First time a new mechanic appears, explain it once (and remember). One
+  /// intro at a time so two new mechanics never collide on the same board.
+  void _maybeFeatureIntro() {
+    if (solved) return;
+    if (grid.wormholes.isNotEmpty && !_seenWormhole) {
+      _seenWormhole = true;
+      SharedPreferences.getInstance().then((p) => p.setBool('seen_wormhole', true));
+      _showHint('NEW · WORMHOLE — IN ONE PORTAL, OUT ITS TWIN',
+        duration: const Duration(milliseconds: 4200));
+    } else if (grid.gates.isNotEmpty && !_seenGate) {
+      _seenGate = true;
+      SharedPreferences.getInstance().then((p) => p.setBool('seen_gate', true));
+      final req  = grid.gates.values.first;
+      final tier = tierFor(req, grid.milestoneCount);
+      _showHint('NEW · MASS GATE — ABSORB THE ${tier.name.toUpperCase()} TO OPEN',
+        duration: const Duration(milliseconds: 4200));
+    }
   }
 
   @override
@@ -132,8 +153,8 @@ class _PuzzleScreenState extends State<PuzzleScreen>
   void _newPuzzle({bool advance = false}) {
     if (!_isDaily && advance) { level++; solvedCount++; }
     final rng = _isDaily ? Random(DailyService.todaySeed()) : null;  // null → fresh random each puzzle
-    final lvl = _isDaily ? DailyService.dailyLevel() : level;
-    grid = PuzzleGrid.generate(lvl, rng: rng);
+    final lvl = widget.fixedLevel ?? (_isDaily ? DailyService.dailyLevel() : level);
+    grid = PuzzleGrid.generate(lvl, rng: rng, force: widget.forceFeatures);
     path
       ..clear()
       ..add(grid.startCell);
@@ -143,7 +164,7 @@ class _PuzzleScreenState extends State<PuzzleScreen>
     _nudge.reset();
     _warp.reset();
     _startTimer();
-    _maybeWormholeIntro();
+    _maybeFeatureIntro();
     setState(() {});
   }
 
@@ -210,6 +231,7 @@ class _PuzzleScreenState extends State<PuzzleScreen>
     final now = DateTime.now().millisecondsSinceEpoch;
     if (now - _lastNudgeMs < 700) return;   // throttle repeated bumps
     _lastNudgeMs = now;
+    _nudgeKind = 1;
     HapticFeedback.heavyImpact();
     AudioService.instance.denied();
     _nudge.forward(from: 0);
@@ -227,6 +249,8 @@ class _PuzzleScreenState extends State<PuzzleScreen>
     if (!viaWorm) {
       if (!grid.adjacent(head, target)) return false;
       if (grid.hasWall(head, target))   return false;
+      final gate = grid.gateAt(head, target);   // sealed until milestone `gate`
+      if (gate != null && _milestonesVisited() < gate) return false;
     }
     if (path.contains(target))          return false;
     final m = grid.milestones[target];
@@ -237,6 +261,29 @@ class _PuzzleScreenState extends State<PuzzleScreen>
       }
     }
     return true;
+  }
+
+  /// True when [target] is blocked only by a still-locked mass gate.
+  bool _isGateBlocked(int target) {
+    final head = path.last;
+    final gate = grid.gateAt(head, target);
+    return gate != null &&
+        _milestonesVisited() < gate &&
+        !grid.hasWall(head, target) &&
+        !path.contains(target);
+  }
+
+  void _nudgeGate(int target) {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    if (now - _lastNudgeMs < 700) return;
+    _lastNudgeMs = now;
+    final req  = grid.gateAt(path.last, target)!;
+    final tier = tierFor(req, grid.milestoneCount);
+    _nudgeKind = 2;
+    HapticFeedback.heavyImpact();
+    AudioService.instance.denied();
+    _nudge.forward(from: 0);
+    _showHint('GATE · ABSORB THE ${tier.name.toUpperCase()} FIRST');
   }
 
   int? _cellAt(Offset p) {
@@ -303,6 +350,8 @@ class _PuzzleScreenState extends State<PuzzleScreen>
       setState(() {});
     } else if (_isBlackHoleEarly(cell)) {
       _nudgeBlackHole();   // explain the block instead of silently rejecting it
+    } else if (_isGateBlocked(cell)) {
+      _nudgeGate(cell);
     }
   }
 
@@ -517,6 +566,7 @@ class _PuzzleScreenState extends State<PuzzleScreen>
                                 pulse: _pulse.value,
                                 solveT: _solve.value,
                                 nudge: _nudge.value,
+                                nudgeKind: _nudgeKind,
                                 warp: _warp.value,
                                 accent: _accent,
                               ),
@@ -749,7 +799,8 @@ class _PuzzlePainter extends CustomPainter {
   final List<int>  path;
   final double     pulse;
   final double     solveT;   // 0 → 1 collapse celebration
-  final double     nudge;    // 0 → 1 black-hole "not yet" warning flash
+  final double     nudge;    // 0 → 1 "not yet" warning flash
+  final int        nudgeKind; // 0 none · 1 black hole · 2 mass gate
   final double     warp;     // 0 → 1 wormhole teleport flash
   final Color      accent;
 
@@ -761,6 +812,7 @@ class _PuzzlePainter extends CustomPainter {
     required this.pulse,
     required this.solveT,
     required this.nudge,
+    required this.nudgeKind,
     required this.warp,
     required this.accent,
   });
@@ -851,6 +903,37 @@ class _PuzzlePainter extends CustomPainter {
         final x = grid.colOf(lo) * cell;
         canvas.drawLine(Offset(x + 2, y), Offset(x + cell - 2, y), wallPaint);
       }
+    }
+
+    // ── Mass gates ───────────────────────────────────────────────────────────
+    // A bar across an edge, coloured by the cosmic object that opens it. Solid +
+    // glowing while locked; faint + dashed once you've absorbed enough mass.
+    if (grid.gates.isNotEmpty) {
+      final visited = path.where((c) => grid.milestones.containsKey(c)).length;
+      grid.gates.forEach((key, req) {
+        final lo = key ~/ cc, hi = key % cc;
+        final open  = visited >= req;
+        final tier  = tierFor(req, grid.milestoneCount);
+        final flash = (nudgeKind == 2 && !open) ? nudge : 0.0;
+        final col   = Color.lerp(tier.color, const Color(0xffff4466), flash)!;
+        final a     = open ? 0.28 : (0.95);
+        final paint = Paint()
+          ..color = col.withValues(alpha: a)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = open ? 2.5 : 4.5 + flash * 2
+          ..strokeCap = StrokeCap.round;
+        if (!open) {
+          paint.maskFilter = const MaskFilter.blur(BlurStyle.normal, 2);
+        }
+        // Vertical edge (horizontal neighbours) vs horizontal edge.
+        if (hi - lo == 1 && grid.rowOf(lo) == grid.rowOf(hi)) {
+          final x = grid.colOf(hi) * cell, y = grid.rowOf(lo) * cell;
+          canvas.drawLine(Offset(x, y + cell * 0.16), Offset(x, y + cell * 0.84), paint);
+        } else {
+          final y = grid.rowOf(hi) * cell, x = grid.colOf(lo) * cell;
+          canvas.drawLine(Offset(x + cell * 0.16, y), Offset(x + cell * 0.84, y), paint);
+        }
+      });
     }
 
     // ── Wormhole portals ────────────────────────────────────────────────────
@@ -945,7 +1028,7 @@ class _PuzzlePainter extends CustomPainter {
     // ── Black-hole "not yet" warning ────────────────────────────────────────
     // Expanding red ring when the player tries to enter the Black Hole before
     // the region is fully consumed (paired with the in-context hint text).
-    if (nudge > 0 && !collapsing) {
+    if (nudge > 0 && nudgeKind == 1 && !collapsing) {
       canvas.drawCircle(bhCenter, cell * (0.55 + 0.5 * nudge),
         Paint()
           ..color = const Color(0xffff4466).withValues(alpha: (1 - nudge) * 0.85)

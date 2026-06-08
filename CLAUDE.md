@@ -133,6 +133,28 @@ A cell is steppable iff:
   `_nudgeBlackHole()` (heavy haptic + expanding red ring + the in-context hint
   "CONSUME EVERY CELL FIRST"), throttled to once per ~700ms.
 
+## Special mechanics (additive to the core puzzle)
+
+Each is sparse (≤1 per board), skill-gated, solvable-by-construction, and gets a
+one-time `NEW · …` intro hint (persisted via `seen_wormhole` / `seen_gate`).
+`PuzzleGrid.generate(level, {force})` gates by level unless `force` (a
+`Set<PuzzleFeature>`) overrides it — `null` = auto by level, `{}` = none, e.g.
+`{PuzzleFeature.massGate}` = force that mechanic. This is what the **dev menu**
+(home screen "· dev ·" → NORMAL / WORMHOLE / MASS GATE / BOTH) uses to launch a
+board with a chosen mechanic via `PuzzleScreen(forceFeatures:, fixedLevel:)`.
+
+- **Wormhole pairs** (`wormholes`, level ≥ `kWormholeLevel` = 4): two linked
+  cells; the worldline steps between twins. Built by reversing the tail of the
+  Hamiltonian solution and linking the cut point to the former last cell.
+  Rendered as teal swirling portals; the worldline lifts the pen across the jump;
+  `_warp` flashes on traversal (whoosh via `AudioService.warp()`).
+- **Mass gates** (`gates`: edgeKey → required milestone, level ≥ `kMassGateLevel`
+  = 7): an edge sealed until you've absorbed milestone N. Placed on a solution
+  edge crossed only after N milestones are collected. `_canStep` blocks it until
+  `_milestonesVisited() >= req`; `_nudgeGate` explains it. Drawn as a bar in the
+  required tier's colour — solid/glowing locked, faint once open. `_nudgeKind`
+  (1 black hole · 2 gate) tells the painter which element to flash red.
+
 ## Collapse animation
 
 `_solve` (2000ms) drives a staged collapse in `_PuzzlePainter._drawCollapse`:

@@ -12,9 +12,14 @@ import 'dart:math';
 /// Hamiltonian path covering the grid. Milestone 1 is pinned to the path's
 /// start and the Black Hole to its end; walls are only added to edges the
 /// solution doesn't use. → infinite, always-solvable puzzles.
-/// Levels below this never spawn a wormhole — they unlock as a skill gate so
+/// Special mechanics that can be woven into the core puzzle. Each unlocks at a
+/// skill-gate level (below), or can be forced on for testing via the dev menu.
+enum PuzzleFeature { wormhole, massGate }
+
+/// Levels below these never spawn the feature — they unlock as skill gates so
 /// players meet them only after the basic trace is second nature.
 const int kWormholeLevel = 4;
+const int kMassGateLevel = 7;
 
 class PuzzleGrid {
   final int size;                 // square board: size × size
@@ -22,6 +27,7 @@ class PuzzleGrid {
   final Map<int, int> milestones; // cellIndex -> milestone number (1..k)
   final Set<int> walls;           // blocked edges, encoded via [edgeKey]
   final Map<int, int> wormholes;  // symmetric cell<->twin links (teleport edges)
+  final Map<int, int> gates;      // edgeKey -> milestone number required to pass
 
   PuzzleGrid({
     required this.size,
@@ -29,10 +35,14 @@ class PuzzleGrid {
     required this.milestones,
     required this.walls,
     this.wormholes = const {},
+    this.gates = const {},
   });
 
   bool isWormhole(int cell)   => wormholes.containsKey(cell);
   int? wormholeTwin(int cell) => wormholes[cell];
+
+  /// Milestone number required to cross the edge a–b, or null if no gate there.
+  int? gateAt(int a, int b) => gates[edgeKey(a, b, cellCount)];
 
   /// Two cells are linked if they're grid-adjacent or a wormhole pair.
   bool linked(int a, int b) => adjacent(a, b) || wormholes[a] == b;
@@ -65,10 +75,18 @@ class PuzzleGrid {
   }
 
   // ── Generation ──────────────────────────────────────────────────────────────
-  static PuzzleGrid generate(int level, {Random? rng}) {
+  /// [force], when non-null, overrides level-based feature gating: exactly the
+  /// listed features are inserted (empty set → a plain board). When null,
+  /// features unlock by [level]. Used by the dev menu to test a given mechanic.
+  static PuzzleGrid generate(int level, {Random? rng, Set<PuzzleFeature>? force}) {
     final r    = rng ?? Random();
     final size = (5 + level ~/ 3).clamp(5, 8);
     final n    = size * size;
+
+    final wantWormhole = force?.contains(PuzzleFeature.wormhole)
+        ?? (level >= kWormholeLevel);
+    final wantGate = force?.contains(PuzzleFeature.massGate)
+        ?? (level >= kMassGateLevel);
 
     var sol = _hamiltonian(size, r) ?? _snake(size);
 
@@ -82,7 +100,7 @@ class PuzzleGrid {
     final wormPositions = <int>{};   // solution indices the wormhole occupies
     bool adj(int a, int b) =>
         ((a ~/ size) - (b ~/ size)).abs() + ((a % size) - (b % size)).abs() == 1;
-    if (level >= kWormholeLevel && n >= 8) {
+    if (wantWormhole && n >= 8) {
       for (var attempt = 0; attempt < 60; attempt++) {
         final cut = 1 + r.nextInt(n - 3);       // cut in [1, n-3]
         final a = sol[cut], b = sol[n - 1];
@@ -114,6 +132,33 @@ class PuzzleGrid {
       ms[sol[idx[i]]] = i + 1;
     }
 
+    // ── Mass gate (skill-gated) ──────────────────────────────────────────────
+    // Seal one solution edge behind a milestone requirement. We place it on an
+    // edge the solution crosses only AFTER it has collected `required`
+    // milestones, so following the solution still works — the player must route
+    // to absorb that object before the way opens. Solvable by construction.
+    final gates = <int, int>{};
+    if (wantGate) {
+      // milestones collected by the time the solution reaches each position
+      final visitedBy = List<int>.filled(sol.length, 0);
+      var acc = 0;
+      for (var i = 0; i < sol.length; i++) {
+        if (ms.containsKey(sol[i])) acc++;
+        visitedBy[i] = acc;
+      }
+      final mc = ms.length;
+      final candidates = <int>[];      // solution edge positions p (sol[p]→sol[p+1])
+      for (var p = 2; p + 1 < sol.length; p++) {
+        if (!adj(sol[p], sol[p + 1])) continue;       // skip the wormhole jump
+        final req = visitedBy[p];                     // milestones in hand at p
+        if (req >= 2 && req < mc) candidates.add(p);  // non-trivial, not the BH
+      }
+      if (candidates.isNotEmpty) {
+        final p = candidates[r.nextInt(candidates.length)];
+        gates[edgeKey(sol[p], sol[p + 1], n)] = visitedBy[p];
+      }
+    }
+
     // Walls on a fraction of edges the solution does NOT use. Only real grid
     // edges count — the wormhole jump isn't a grid edge, so skip it here.
     final solEdges = <int>{};
@@ -135,7 +180,7 @@ class PuzzleGrid {
 
     return PuzzleGrid(
       size: size, solution: sol, milestones: ms, walls: walls,
-      wormholes: wormholes);
+      wormholes: wormholes, gates: gates);
   }
 
   /// Randomized Hamiltonian path via Warnsdorff's heuristic with random restarts.
