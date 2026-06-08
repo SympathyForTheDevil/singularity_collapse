@@ -1,6 +1,5 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
-import 'accretion_screen.dart';
 import 'audio.dart';
 import 'daily_service.dart';
 import 'puzzle_screen.dart';
@@ -62,12 +61,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     AudioService.instance.ui();
     Navigator.push(context, MaterialPageRoute(
       builder: (_) => const PuzzleScreen(mode: PuzzleMode.zen)));
-  }
-
-  void _goAccretion() {
-    AudioService.instance.ui();
-    Navigator.push(context, MaterialPageRoute(
-      builder: (_) => const AccretionScreen()));
   }
 
   Future<void> _toggleMute() async {
@@ -181,13 +174,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                     _menuBtn('ZEN MODE',
                       color: _cyan,
                       onTap: _goZen),
-                    const SizedBox(height: 14),
-
-                    // Accretion (score-attack) button
-                    _menuBtn('ACCRETION',
-                      subtitle: 'cascade · one more run',
-                      color: _purple,
-                      onTap: _goAccretion),
                   ],
                 ),
               ),
