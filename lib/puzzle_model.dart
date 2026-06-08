@@ -12,18 +12,30 @@ import 'dart:math';
 /// Hamiltonian path covering the grid. Milestone 1 is pinned to the path's
 /// start and the Black Hole to its end; walls are only added to edges the
 /// solution doesn't use. → infinite, always-solvable puzzles.
+/// Levels below this never spawn a wormhole — they unlock as a skill gate so
+/// players meet them only after the basic trace is second nature.
+const int kWormholeLevel = 4;
+
 class PuzzleGrid {
   final int size;                 // square board: size × size
   final List<int> solution;       // a Hamiltonian path (cell indices, in order)
   final Map<int, int> milestones; // cellIndex -> milestone number (1..k)
   final Set<int> walls;           // blocked edges, encoded via [edgeKey]
+  final Map<int, int> wormholes;  // symmetric cell<->twin links (teleport edges)
 
   PuzzleGrid({
     required this.size,
     required this.solution,
     required this.milestones,
     required this.walls,
+    this.wormholes = const {},
   });
+
+  bool isWormhole(int cell)   => wormholes.containsKey(cell);
+  int? wormholeTwin(int cell) => wormholes[cell];
+
+  /// Two cells are linked if they're grid-adjacent or a wormhole pair.
+  bool linked(int a, int b) => adjacent(a, b) || wormholes[a] == b;
 
   int get cellCount      => size * size;
   int get milestoneCount => milestones.length;
@@ -58,7 +70,33 @@ class PuzzleGrid {
     final size = (5 + level ~/ 3).clamp(5, 8);
     final n    = size * size;
 
-    final sol = _hamiltonian(size, r) ?? _snake(size);
+    var sol = _hamiltonian(size, r) ?? _snake(size);
+
+    // ── Wormhole (skill-gated) ───────────────────────────────────────────────
+    // Insert exactly one teleport by reversing the tail of the solution and
+    // linking the cut point to the (former) last cell. The reversed tail stays
+    // grid-adjacent throughout, so the new path covers every cell with all
+    // consecutive steps grid-adjacent EXCEPT the single wormhole jump → still
+    // solvable by construction, and the solution genuinely uses the wormhole.
+    final wormholes = <int, int>{};
+    final wormPositions = <int>{};   // solution indices the wormhole occupies
+    bool adj(int a, int b) =>
+        ((a ~/ size) - (b ~/ size)).abs() + ((a % size) - (b % size)).abs() == 1;
+    if (level >= kWormholeLevel && n >= 8) {
+      for (var attempt = 0; attempt < 60; attempt++) {
+        final cut = 1 + r.nextInt(n - 3);       // cut in [1, n-3]
+        final a = sol[cut], b = sol[n - 1];
+        if (adj(a, b)) continue;                // need a real (non-adjacent) jump
+        sol = [
+          ...sol.sublist(0, cut + 1),
+          ...sol.sublist(cut + 1).reversed,
+        ];
+        wormholes[a] = b;
+        wormholes[b] = a;
+        wormPositions.addAll([cut, cut + 1]);   // a at cut, b at cut+1
+        break;
+      }
+    }
 
     // Milestones: #1 pinned to the start, the Black Hole pinned to the LAST cell,
     // the rest at random increasing positions between. Capped so each milestone
@@ -67,7 +105,8 @@ class PuzzleGrid {
     final idxSet = <int>{0, n - 1};
     var guard = 0;
     while (idxSet.length < k && guard++ < 2000) {
-      idxSet.add(1 + r.nextInt(n - 2));
+      final p = 1 + r.nextInt(n - 2);
+      if (!wormPositions.contains(p)) idxSet.add(p);  // keep portals milestone-free
     }
     final idx = idxSet.toList()..sort();
     final ms = <int, int>{};
@@ -75,10 +114,11 @@ class PuzzleGrid {
       ms[sol[idx[i]]] = i + 1;
     }
 
-    // Walls on a fraction of edges the solution does NOT use.
+    // Walls on a fraction of edges the solution does NOT use. Only real grid
+    // edges count — the wormhole jump isn't a grid edge, so skip it here.
     final solEdges = <int>{};
     for (var i = 0; i + 1 < sol.length; i++) {
-      solEdges.add(edgeKey(sol[i], sol[i + 1], n));
+      if (adj(sol[i], sol[i + 1])) solEdges.add(edgeKey(sol[i], sol[i + 1], n));
     }
     final walls = <int>{};
     for (var a = 0; a < n; a++) {
@@ -93,7 +133,9 @@ class PuzzleGrid {
       }
     }
 
-    return PuzzleGrid(size: size, solution: sol, milestones: ms, walls: walls);
+    return PuzzleGrid(
+      size: size, solution: sol, milestones: ms, walls: walls,
+      wormholes: wormholes);
   }
 
   /// Randomized Hamiltonian path via Warnsdorff's heuristic with random restarts.

@@ -33,6 +33,7 @@ class AudioService {
   AudioSource? _denied;
   AudioSource? _collapse;
   AudioSource? _ui;
+  AudioSource? _warp;
   AudioSource? _pad;
   SoundHandle? _padHandle;
 
@@ -108,6 +109,12 @@ class AudioService {
     _soloud.play(_ui!, volume: 0.3);
   }
 
+  /// Worldline teleported through a wormhole — a quick portal whoosh.
+  void warp() {
+    if (!_ready || _muted || _warp == null) return;
+    _soloud.play(_warp!, volume: 0.5);
+  }
+
   // ── Ambient bed ────────────────────────────────────────────────────────────
   Future<void> startAmbient({bool calm = false}) async {
     if (!_ready || _muted || _pad == null || _padHandle != null) return;
@@ -138,6 +145,7 @@ class AudioService {
     _step     = await _load('step',     _tick(880, 0.07));
     _denied   = await _load('denied',   _deniedTone());
     _ui       = await _load('ui',       _tick(523.25, 0.05, gain: 0.6));
+    _warp     = await _load('warp',     _warpSweep());
     _collapse = await _load('collapse', _collapseStinger());
     _pad      = await _load('pad',      _padLoop(8.0));
   }
@@ -177,6 +185,22 @@ class AudioService {
       final t   = i / _sr;
       final env = (i < atk ? i / atk : 1.0) * exp(-t * 38);
       out[i] = sin(2 * pi * freq * t) * env * 0.5 * gain;
+    }
+    return out;
+  }
+
+  /// A quick swept "whoosh" for a wormhole teleport: pitch rises then falls.
+  Float64List _warpSweep() {
+    const durSec = 0.34;
+    final out = _alloc(durSec);
+    final atk = 0.005 * _sr;
+    for (var i = 0; i < out.length; i++) {
+      final t   = i / _sr;
+      final x   = t / durSec;                       // 0..1
+      final f   = 300 + 1100 * sin(pi * x);         // 300 → 1400 → 300
+      final env = (i < atk ? i / atk : 1.0) * (1 - x);
+      final vib = 1 + 0.02 * sin(2 * pi * 30 * t);
+      out[i] = sin(2 * pi * f * t * vib) * env * 0.5;
     }
     return out;
   }

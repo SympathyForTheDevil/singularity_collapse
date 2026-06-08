@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'audio.dart';
 import 'cosmic.dart';
 import 'daily_service.dart';
@@ -38,6 +39,9 @@ class _PuzzleScreenState extends State<PuzzleScreen>
   late final AnimationController _pulse;
   late final AnimationController _solve;
   late final AnimationController _nudge;   // black-hole "not yet" warning flash
+  late final AnimationController _warp;    // wormhole teleport flash
+
+  bool _seenWormhole = false;              // gates the one-time intro hint
 
   // Transient in-context hint shown in the NEXT line (e.g. why a move was blocked).
   String?  _hint;
@@ -58,6 +62,8 @@ class _PuzzleScreenState extends State<PuzzleScreen>
       vsync: this, duration: const Duration(milliseconds: 1400))..repeat();
     _nudge = AnimationController(
       vsync: this, duration: const Duration(milliseconds: 600));
+    _warp = AnimationController(
+      vsync: this, duration: const Duration(milliseconds: 520));
     _solve = AnimationController(
       vsync: this, duration: const Duration(milliseconds: 2000))
       ..addStatusListener((s) async {
@@ -72,7 +78,23 @@ class _PuzzleScreenState extends State<PuzzleScreen>
         }
       });
     _newPuzzle();
+    _loadSeen();
     AudioService.instance.startAmbient(calm: _isZen);
+  }
+
+  Future<void> _loadSeen() async {
+    final p = await SharedPreferences.getInstance();
+    _seenWormhole = p.getBool('seen_wormhole') ?? false;
+    if (mounted) _maybeWormholeIntro();
+  }
+
+  /// First time a wormhole puzzle appears, explain it once (and remember).
+  void _maybeWormholeIntro() {
+    if (_seenWormhole || grid.wormholes.isEmpty || solved) return;
+    _seenWormhole = true;
+    SharedPreferences.getInstance().then((p) => p.setBool('seen_wormhole', true));
+    _showHint('NEW · WORMHOLE — IN ONE PORTAL, OUT ITS TWIN',
+      duration: const Duration(milliseconds: 4200));
   }
 
   @override
@@ -83,6 +105,7 @@ class _PuzzleScreenState extends State<PuzzleScreen>
     _pulse.dispose();
     _solve.dispose();
     _nudge.dispose();
+    _warp.dispose();
     super.dispose();
   }
 
@@ -114,7 +137,9 @@ class _PuzzleScreenState extends State<PuzzleScreen>
     _showShare = false;
     _clearHint();
     _nudge.reset();
+    _warp.reset();
     _startTimer();
+    _maybeWormholeIntro();
     setState(() {});
   }
 
@@ -149,10 +174,11 @@ class _PuzzleScreenState extends State<PuzzleScreen>
     setState(() {});
   }
 
-  void _showHint(String text) {
+  void _showHint(String text,
+      {Duration duration = const Duration(milliseconds: 1600)}) {
     _hintTimer?.cancel();
     setState(() => _hint = text);
-    _hintTimer = Timer(const Duration(milliseconds: 1600), () {
+    _hintTimer = Timer(duration, () {
       if (mounted) setState(() => _hint = null);
     });
   }
@@ -190,9 +216,14 @@ class _PuzzleScreenState extends State<PuzzleScreen>
 
   bool _canStep(int target) {
     final head = path.last;
-    if (!grid.adjacent(head, target)) return false;
-    if (grid.hasWall(head, target))   return false;
-    if (path.contains(target))        return false;
+    // A wormhole twin is reachable directly (and carries no wall); otherwise the
+    // target must be a wall-free grid neighbour.
+    final viaWorm = grid.wormholeTwin(head) == target;
+    if (!viaWorm) {
+      if (!grid.adjacent(head, target)) return false;
+      if (grid.hasWall(head, target))   return false;
+    }
+    if (path.contains(target))          return false;
     final m = grid.milestones[target];
     if (m != null) {
       if (m != _milestonesVisited() + 1) return false;
@@ -248,12 +279,19 @@ class _PuzzleScreenState extends State<PuzzleScreen>
       final isMs    = grid.milestones.containsKey(cell);
       final mnum    = grid.milestones[cell];
       final isLower = isMs && mnum != grid.milestoneCount;
+      final viaWorm = grid.wormholeTwin(path.last) == cell;
       path.add(cell);
-      HapticFeedback.lightImpact();
+      if (viaWorm) {
+        HapticFeedback.mediumImpact();
+        AudioService.instance.warp();
+        _warp.forward(from: 0);
+      } else {
+        HapticFeedback.lightImpact();
+      }
       if (isLower) {
         HapticFeedback.selectionClick();
         AudioService.instance.milestone(mnum!);
-      } else if (!isMs) {
+      } else if (!isMs && !viaWorm) {
         AudioService.instance.step(path.length / grid.cellCount);
       }
       if (path.length == grid.cellCount) _onSolved();
@@ -424,24 +462,30 @@ class _PuzzleScreenState extends State<PuzzleScreen>
                         ),
                       ],
                       const SizedBox(height: 12),
-                      Text(
-                        _hint != null
-                          ? _hint!
-                          : solved
-                            ? 'REGION COLLAPSED'
-                            : 'NEXT  ·  ${nextTier.name.toUpperCase()}',
-                        style: TextStyle(
-                          color: _hint != null
-                            ? const Color(0xffff4466)
-                            : solved ? Colors.white : nextTier.color,
-                          fontSize: 14, fontFamily: 'monospace', letterSpacing: 3,
-                          fontWeight: FontWeight.bold,
-                          shadows: [Shadow(
-                            color: (_hint != null
-                                ? const Color(0xffff4466)
-                                : nextTier.color).withValues(alpha: 0.55),
-                            blurRadius: 10)]),
-                      ),
+                      Builder(builder: (_) {
+                        // Hint colour: teal for a "NEW" feature intro, red for a
+                        // blocked-move warning, else the next tier's colour.
+                        final hintColor = _hint != null && _hint!.startsWith('NEW')
+                            ? const Color(0xff37e0d0)
+                            : const Color(0xffff4466);
+                        final color = _hint != null
+                            ? hintColor
+                            : solved ? Colors.white : nextTier.color;
+                        return Text(
+                          _hint != null
+                            ? _hint!
+                            : solved
+                              ? 'REGION COLLAPSED'
+                              : 'NEXT  ·  ${nextTier.name.toUpperCase()}',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: color,
+                            fontSize: 14, fontFamily: 'monospace', letterSpacing: 3,
+                            fontWeight: FontWeight.bold,
+                            shadows: [Shadow(
+                              color: color.withValues(alpha: 0.55), blurRadius: 10)]),
+                        );
+                      }),
                     ],
                   ),
                 ),
@@ -459,7 +503,7 @@ class _PuzzleScreenState extends State<PuzzleScreen>
                           onPanStart:  (d) => _onPan(d.localPosition),
                           onPanUpdate: (d) => _onPan(d.localPosition),
                           child: AnimatedBuilder(
-                            animation: Listenable.merge([_pulse, _solve, _nudge]),
+                            animation: Listenable.merge([_pulse, _solve, _nudge, _warp]),
                             builder: (_, _) => CustomPaint(
                               size: Size(side, side),
                               painter: _PuzzlePainter(
@@ -468,6 +512,7 @@ class _PuzzleScreenState extends State<PuzzleScreen>
                                 pulse: _pulse.value,
                                 solveT: _solve.value,
                                 nudge: _nudge.value,
+                                warp: _warp.value,
                                 accent: _accent,
                               ),
                             ),
@@ -700,7 +745,10 @@ class _PuzzlePainter extends CustomPainter {
   final double     pulse;
   final double     solveT;   // 0 → 1 collapse celebration
   final double     nudge;    // 0 → 1 black-hole "not yet" warning flash
+  final double     warp;     // 0 → 1 wormhole teleport flash
   final Color      accent;
+
+  static const Color _portal = Color(0xff37e0d0);  // wormhole teal
 
   _PuzzlePainter({
     required this.grid,
@@ -708,6 +756,7 @@ class _PuzzlePainter extends CustomPainter {
     required this.pulse,
     required this.solveT,
     required this.nudge,
+    required this.warp,
     required this.accent,
   });
 
@@ -799,11 +848,34 @@ class _PuzzlePainter extends CustomPainter {
       }
     }
 
+    // ── Wormhole portals ────────────────────────────────────────────────────
+    if (grid.wormholes.isNotEmpty) {
+      final drawn = <int>{};
+      grid.wormholes.forEach((a, b) {
+        if (drawn.contains(a)) return;
+        drawn..add(a)..add(b);
+        final pa = center(a), pb = center(b);
+        // Faint connector so the link reads at a glance.
+        canvas.drawLine(pa, pb, Paint()
+          ..color = _portal.withValues(alpha: 0.12)
+          ..strokeWidth = 1.5
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2));
+        _drawPortal(canvas, pa, cell, pulseV);
+        _drawPortal(canvas, pb, cell, pulseV);
+      });
+    }
+
     // ── Worldline ──────────────────────────────────────────────────────────
     if (path.length >= 2) {
       final line = Path()..moveTo(center(path.first).dx, center(path.first).dy);
       for (var i = 1; i < path.length; i++) {
-        line.lineTo(center(path[i]).dx, center(path[i]).dy);
+        // A wormhole jump isn't a grid edge — lift the pen so the line doesn't
+        // streak across the board; the portals carry the connection visually.
+        if (grid.adjacent(path[i - 1], path[i])) {
+          line.lineTo(center(path[i]).dx, center(path[i]).dy);
+        } else {
+          line.moveTo(center(path[i]).dx, center(path[i]).dy);
+        }
       }
       canvas.drawPath(line, Paint()
         ..color = accent.withValues(alpha: 0.26)
@@ -902,6 +974,29 @@ class _PuzzlePainter extends CustomPainter {
 
   /// A deterministic field of distant stars revealed as the region zooms out —
   /// the "this region was one point in a galaxy" beat.
+  /// A wormhole portal: swirling teal arcs round a dark core, brightening on warp.
+  void _drawPortal(Canvas canvas, Offset pos, double cell, double pulseV) {
+    final r    = cell * 0.34;
+    final glow = (0.20 + warp * 0.55 + pulseV * 0.08).clamp(0.0, 1.0);
+    canvas.drawCircle(pos, r * (1.5 + warp * 0.6),
+      Paint()..color = _portal.withValues(alpha: glow));
+    final rot = pulse * 2 * pi;
+    for (var k = 0; k < 2; k++) {
+      canvas.drawArc(
+        Rect.fromCircle(center: pos, radius: r * (0.7 + k * 0.32)),
+        rot * (k.isEven ? 1 : -1) + k * pi, pi * 1.2, false,
+        Paint()
+          ..color = _portal.withValues(alpha: 0.9)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 2.5
+          ..strokeCap = StrokeCap.round);
+    }
+    canvas.drawCircle(pos, r * 0.45, Paint()..color = const Color(0xff04141a));
+    canvas.drawCircle(pos, r, Paint()
+      ..color = _portal.withValues(alpha: 0.9)
+      ..style = PaintingStyle.stroke ..strokeWidth = 2);
+  }
+
   void _drawStarfield(Canvas canvas, Size size, double alpha) {
     if (alpha <= 0) return;
     final rnd  = Random(0x5EED);
