@@ -70,6 +70,29 @@ void main() {
     }
   });
 
+  test('gravity wells are skill-gated and stay solvable', () {
+    // Gated below kGravityWellLevel.
+    for (var s = 0; s < 20; s++) {
+      expect(PuzzleGrid.generate(kGravityWellLevel - 1).wells, isEmpty);
+    }
+    // When present, the well sits on a straight run of `wellRange` solution
+    // steps (same direction, grid-adjacent) → the launch corridor is exactly the
+    // solution's next cells, so following the solution flings you correctly.
+    for (var s = 0; s < 40; s++) {
+      final g = PuzzleGrid.generate(12, force: {PuzzleFeature.gravityWell});
+      if (g.wells.isEmpty) continue;
+      final pos = {for (var i = 0; i < g.solution.length; i++) g.solution[i]: i};
+      g.wells.forEach((cell, dir) {
+        final i = pos[cell]!;
+        expect(i + PuzzleGrid.wellRange, lessThan(g.solution.length));
+        for (var srun = 0; srun < PuzzleGrid.wellRange; srun++) {
+          expect(g.solution[i + srun + 1] - g.solution[i + srun], dir); // straight
+          expect(g.adjacent(g.solution[i + srun], g.solution[i + srun + 1]), isTrue);
+        }
+      });
+    }
+  });
+
   test('forced features appear regardless of level', () {
     final g1 = PuzzleGrid.generate(2, force: {PuzzleFeature.wormhole});
     expect(g1.wormholes, isNotEmpty);
@@ -79,5 +102,6 @@ void main() {
     final g3 = PuzzleGrid.generate(12, force: const <PuzzleFeature>{});
     expect(g3.wormholes, isEmpty);
     expect(g3.gates, isEmpty);
+    expect(g3.wells, isEmpty);
   });
 }

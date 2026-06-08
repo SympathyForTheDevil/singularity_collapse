@@ -49,9 +49,16 @@ class _PuzzleScreenState extends State<PuzzleScreen>
   late final AnimationController _nudge;   // black-hole "not yet" warning flash
   late final AnimationController _warp;    // wormhole teleport flash
   late final AnimationController _unlock;  // mass-gate open ripple
+  late final AnimationController _sling;   // gravity-well launch streak
 
   bool _seenWormhole = false;              // gate the one-time intro hints
   bool _seenGate     = false;
+  bool _seenWell     = false;
+
+  // Gravity-well launches are atomic for undo: each entry is the path index of
+  // a well cell; the launch spans [idx, idx + PuzzleGrid.wellRange].
+  final Set<int> _launches = {};
+  int? _slingFrom, _slingTo;               // cells the current launch streaks between
 
   // Transient in-context hint shown in the NEXT line (e.g. why a move was blocked).
   String?  _hint;
@@ -81,6 +88,8 @@ class _PuzzleScreenState extends State<PuzzleScreen>
       });
     _unlock = AnimationController(
       vsync: this, duration: const Duration(milliseconds: 600));
+    _sling = AnimationController(
+      vsync: this, duration: const Duration(milliseconds: 320));
     _solve = AnimationController(
       vsync: this, duration: const Duration(milliseconds: 2000))
       ..addStatusListener((s) async {
@@ -103,6 +112,7 @@ class _PuzzleScreenState extends State<PuzzleScreen>
     final p = await SharedPreferences.getInstance();
     _seenWormhole = p.getBool('seen_wormhole') ?? false;
     _seenGate     = p.getBool('seen_gate') ?? false;
+    _seenWell     = p.getBool('seen_well') ?? false;
     if (mounted) _maybeFeatureIntro();
   }
 
@@ -120,6 +130,11 @@ class _PuzzleScreenState extends State<PuzzleScreen>
       SharedPreferences.getInstance().then((p) => p.setBool('seen_gate', true));
       _showHint('NEW · MASS GATE — GRAB THE BOSON TO OPEN IT',
         duration: const Duration(milliseconds: 4200));
+    } else if (grid.wells.isNotEmpty && !_seenWell) {
+      _seenWell = true;
+      SharedPreferences.getInstance().then((p) => p.setBool('seen_well', true));
+      _showHint('NEW · GRAVITY WELL — IT FLINGS YOU; AIM YOUR APPROACH',
+        duration: const Duration(milliseconds: 4200));
     }
   }
 
@@ -133,6 +148,7 @@ class _PuzzleScreenState extends State<PuzzleScreen>
     _nudge.dispose();
     _warp.dispose();
     _unlock.dispose();
+    _sling.dispose();
     super.dispose();
   }
 
@@ -166,6 +182,8 @@ class _PuzzleScreenState extends State<PuzzleScreen>
     _nudge.reset();
     _warp.reset();
     _unlock.reset();
+    _sling.reset();
+    _launches.clear();
     _startTimer();
     _maybeFeatureIntro();
     setState(() {});
@@ -179,26 +197,40 @@ class _PuzzleScreenState extends State<PuzzleScreen>
     _clearHint();
     _warp.reset();   // portals back to their idle look
     _unlock.reset();
+    _sling.reset();
+    _launches.clear();
     HapticFeedback.mediumImpact();
     setState(() {});
   }
 
-  /// Step back one cell (undo the last move).
+  /// Step back one move. A gravity-well launch is atomic — it undoes the whole
+  /// fling (well cell + the cells it flung you through), not one corridor cell.
   void _undo() {
     if (solved || path.length < 2) return;
-    path.removeLast();
+    final wellStart = path.length - 1 - PuzzleGrid.wellRange;
+    if (_launches.contains(wellStart)) {
+      path.removeRange(wellStart, path.length);
+      _launches.remove(wellStart);
+    } else {
+      path.removeLast();
+    }
     _clearHint();
     HapticFeedback.selectionClick();
     setState(() {});
   }
 
-  /// Truncate the worldline back to [cell] (drops everything after it). Tapping
-  /// any visited cell rewinds to there — the fast way to fix an early mistake.
+  /// Truncate the worldline back to [cell] (drops everything after it). If the
+  /// tapped cell sits inside a launch, snap to just before the well.
   void _truncateTo(int cell) {
     if (solved) return;
-    final i = path.indexOf(cell);
+    var i = path.indexOf(cell);
     if (i < 0 || i == path.length - 1) return;
+    for (final w in _launches) {
+      if (i >= w && i <= w + PuzzleGrid.wellRange) i = w - 1;
+    }
+    if (i < 0) return;
     path.removeRange(i + 1, path.length);
+    _launches.removeWhere((w) => w > i);
     _clearHint();
     HapticFeedback.selectionClick();
     setState(() {});
@@ -264,7 +296,51 @@ class _PuzzleScreenState extends State<PuzzleScreen>
         return false;
       }
     }
+    // A gravity well only accepts you if its whole launch corridor is clear.
+    final wdir = grid.wellDir(target);
+    if (wdir != null && !_wellCorridorClear(target, wdir)) return false;
     return true;
+  }
+
+  /// All [PuzzleGrid.wellRange] cells the well would fling through are in-line,
+  /// wall-free and unvisited.
+  bool _wellCorridorClear(int well, int dir) {
+    var prev = well;
+    for (var s = 1; s <= PuzzleGrid.wellRange; s++) {
+      final c = well + dir * s;
+      if (c < 0 || c >= grid.cellCount) return false;
+      if (!grid.adjacent(prev, c))      return false;   // also catches row-wrap
+      if (grid.hasWall(prev, c))        return false;
+      if (path.contains(c))             return false;
+      prev = c;
+    }
+    return true;
+  }
+
+  /// The cells a well launch consumes: [well, well+dir, … well+range·dir].
+  List<int> _wellPath(int well, int dir) =>
+      [for (var s = 0; s <= PuzzleGrid.wellRange; s++) well + dir * s];
+
+  /// True when [target] is a well you could reach but whose launch is blocked.
+  bool _isWellBlocked(int target) {
+    final dir = grid.wellDir(target);
+    if (dir == null) return false;
+    final head = path.last;
+    return grid.adjacent(head, target) &&
+        !grid.hasWall(head, target) &&
+        !path.contains(target) &&
+        !_wellCorridorClear(target, dir);
+  }
+
+  void _nudgeWell() {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    if (now - _lastNudgeMs < 700) return;
+    _lastNudgeMs = now;
+    _nudgeKind = 3;
+    HapticFeedback.heavyImpact();
+    AudioService.instance.denied();
+    _nudge.forward(from: 0);
+    _showHint('GRAVITY WELL · LAUNCH PATH BLOCKED');
   }
 
   /// Has the boson with id [keyId] been collected (its cell is on the path)?
@@ -322,6 +398,9 @@ class _PuzzleScreenState extends State<PuzzleScreen>
     if (cell == null || cell == path.last) return;
 
     if (path.length >= 2 && cell == path[path.length - 2]) {
+      // A gravity-well launch is atomic — don't unwind it by dragging back
+      // through its corridor; the Undo button handles that.
+      if (_launches.contains(path.length - 1 - PuzzleGrid.wellRange)) return;
       // Deliberate pull-back into the previous cell = undo; a mere edge graze
       // during forward motion is ignored.
       if (_deepInside(local, cell)) {
@@ -334,6 +413,22 @@ class _PuzzleScreenState extends State<PuzzleScreen>
     }
 
     if (_canStep(cell)) {
+      // ── Gravity-well launch ─────────────────────────────────────────────
+      final wdir = grid.wellDir(cell);
+      if (wdir != null) {
+        final launch = _wellPath(cell, wdir);   // well + the cells it flings through
+        _launches.add(path.length);             // remember the well's index
+        path.addAll(launch);
+        _slingFrom = launch.first;
+        _slingTo   = launch.last;
+        HapticFeedback.mediumImpact();
+        AudioService.instance.slingshot();
+        _sling.forward(from: 0);
+        if (path.length == grid.cellCount) _onSolved();
+        setState(() {});
+        return;
+      }
+
       final isMs    = grid.milestones.containsKey(cell);
       final mnum    = grid.milestones[cell];
       final isLower = isMs && mnum != grid.milestoneCount;
@@ -365,6 +460,8 @@ class _PuzzleScreenState extends State<PuzzleScreen>
       _nudgeBlackHole();   // explain the block instead of silently rejecting it
     } else if (_isGateBlocked(cell)) {
       _nudgeGate(cell);
+    } else if (_isWellBlocked(cell)) {
+      _nudgeWell();
     }
   }
 
@@ -570,7 +667,7 @@ class _PuzzleScreenState extends State<PuzzleScreen>
                           onPanStart:  (d) => _onPan(d.localPosition),
                           onPanUpdate: (d) => _onPan(d.localPosition),
                           child: AnimatedBuilder(
-                            animation: Listenable.merge([_pulse, _solve, _nudge, _warp, _unlock]),
+                            animation: Listenable.merge([_pulse, _solve, _nudge, _warp, _unlock, _sling]),
                             builder: (_, _) => CustomPaint(
                               size: Size(side, side),
                               painter: _PuzzlePainter(
@@ -582,6 +679,9 @@ class _PuzzleScreenState extends State<PuzzleScreen>
                                 nudgeKind: _nudgeKind,
                                 warp: _warp.value,
                                 unlock: _unlock.value,
+                                sling: _sling.value,
+                                slingFrom: _slingFrom,
+                                slingTo: _slingTo,
                                 accent: _accent,
                               ),
                             ),
@@ -817,10 +917,14 @@ class _PuzzlePainter extends CustomPainter {
   final int        nudgeKind; // 0 none · 1 black hole · 2 mass gate
   final double     warp;     // 0 → 1 wormhole teleport flash
   final double     unlock;   // 0 → 1 mass-gate open ripple
+  final double     sling;    // 0 → 1 gravity-well launch streak
+  final int?       slingFrom;
+  final int?       slingTo;
   final Color      accent;
 
   static const Color _portal = Color(0xff37e0d0);  // wormhole teal
   static const Color _boson  = Color(0xff66ffb0);  // boson / mass-gate green
+  static const Color _well   = Color(0xffff5ca8);  // gravity-well magenta
 
   _PuzzlePainter({
     required this.grid,
@@ -831,6 +935,9 @@ class _PuzzlePainter extends CustomPainter {
     required this.nudgeKind,
     required this.warp,
     required this.unlock,
+    required this.sling,
+    required this.slingFrom,
+    required this.slingTo,
     required this.accent,
   });
 
@@ -995,6 +1102,41 @@ class _PuzzlePainter extends CustomPainter {
       });
     }
 
+    // ── Gravity wells ────────────────────────────────────────────────────────
+    // A magenta swirl with an arrow + dots showing the fixed launch (it flings
+    // you `wellRange` cells that way). Flashes red on a blocked-launch bump.
+    if (grid.wells.isNotEmpty) {
+      grid.wells.forEach((cellIdx, dir) {
+        final pos  = center(cellIdx);
+        final done = path.contains(cellIdx);
+        final v    = dir == 1 ? const Offset(1, 0)
+                   : dir == -1 ? const Offset(-1, 0)
+                   : dir == grid.size ? const Offset(0, 1)
+                   : const Offset(0, -1);
+        final flash = nudgeKind == 3 ? nudge : 0.0;
+        final col   = Color.lerp(_well, const Color(0xffff4466), flash)!
+            .withValues(alpha: done ? 0.3 : 1.0);
+        final spin = pulse * 2 * pi;
+        for (var k = 0; k < 2; k++) {
+          final rect = Rect.fromCircle(center: pos, radius: cell * (0.22 + k * 0.1));
+          canvas.drawArc(rect, spin + k * pi, pi * 1.25, false,
+            Paint()..color = col.withValues(alpha: (done ? 0.3 : 0.85) - k * 0.25)
+              ..style = PaintingStyle.stroke..strokeWidth = 2.5..strokeCap = StrokeCap.round);
+        }
+        for (var s = 1; s <= PuzzleGrid.wellRange; s++) {
+          canvas.drawCircle(pos + v * (cell * s), 2.4,
+            Paint()..color = col.withValues(alpha: done ? 0.2 : 0.5));
+        }
+        // Arrowhead at the landing cell.
+        final tip  = pos + v * (cell * PuzzleGrid.wellRange.toDouble());
+        final perp = Offset(-v.dy, v.dx);
+        final ap = Paint()..color = col..strokeWidth = 2.5
+          ..style = PaintingStyle.stroke..strokeCap = StrokeCap.round;
+        canvas.drawLine(tip - v * (cell * 0.18) + perp * (cell * 0.14), tip, ap);
+        canvas.drawLine(tip - v * (cell * 0.18) - perp * (cell * 0.14), tip, ap);
+      });
+    }
+
     // ── Worldline ──────────────────────────────────────────────────────────
     if (path.length >= 2) {
       final line = Path()..moveTo(center(path.first).dx, center(path.first).dy);
@@ -1020,6 +1162,19 @@ class _PuzzlePainter extends CustomPainter {
         ..strokeWidth = cell * 0.28
         ..strokeJoin = StrokeJoin.round
         ..strokeCap = StrokeCap.round);
+    }
+
+    // ── Gravity-well launch streak ───────────────────────────────────────────
+    if (sling > 0 && slingFrom != null && slingTo != null) {
+      final a = 1 - sling;
+      final f = center(slingFrom!), t = center(slingTo!);
+      canvas.drawLine(f, t, Paint()
+        ..color = _well.withValues(alpha: a * 0.85)
+        ..strokeWidth = cell * 0.30 * (1 - sling * 0.4)
+        ..strokeCap = StrokeCap.round
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4));
+      final hp = Offset.lerp(f, t, Curves.easeOut.transform(sling))!;
+      canvas.drawCircle(hp, cell * 0.14, Paint()..color = Colors.white.withValues(alpha: a));
     }
 
     // ── Cosmic milestones ──────────────────────────────────────────────────

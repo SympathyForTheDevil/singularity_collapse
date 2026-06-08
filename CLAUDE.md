@@ -158,7 +158,19 @@ board with a chosen mechanic via `PuzzleScreen(forceFeatures:, fixedLevel:)`.
   it.) `_canStep` blocks until `_keyCollected(keyId)`; collecting the boson fires
   `AudioService.unlock()` + the `_unlock` open-ripple; `_nudgeGate` → "GATE · GRAB
   THE BOSON FIRST". Drawn green (boson = mote + spark, gate = bar: solid locked,
-  faint open). `_nudgeKind` (1 black hole · 2 gate) routes the red bump-flash.
+  faint open). `_nudgeKind` (1 black hole · 2 gate · 3 well) routes the bump-flash.
+
+- **Gravity wells** (`wells`: cell → direction delta, `wellRange` = 2, level ≥
+  `kGravityWellLevel` = 10): stepping onto a well flings the worldline `wellRange`
+  cells in a fixed direction, auto-consuming the corridor. Placed where the
+  solution already runs straight for `wellRange` steps → the launch corridor is
+  the solution's own next cells, guaranteed clear when reached → solvable by
+  construction. `_canStep` only accepts the well if `_wellCorridorClear`; entering
+  launches via `_wellPath` and records the well index in `_launches` so **undo is
+  atomic** (the whole fling unwinds, not one corridor cell — drag-back through a
+  launch is disabled, Undo handles it; `_truncateTo` snaps to before the well).
+  Blocked launch → `_nudgeWell`. Drawn magenta (swirl + arrow + landing dots);
+  `slingshot()` audio + `_sling` launch streak.
 
 ## Collapse animation
 
@@ -215,9 +227,8 @@ for an unsigned (debug-signed) fallback that still installs fine for testing.
 
 ## Planned next features (priority order)
 
-1. **Unique mechanics** — mass gates (only enter after reaching milestone N),
-   wormhole pairs (enter one, path continues from the twin), gravity-well tiles
-   (momentum lock: forces next move in a fixed direction), hunter enemy.
+1. **Remaining unique mechanic** — hunter enemy (tonal gamble; deferred). Three
+   additive mechanics shipped: wormholes, mass gates + bosons, gravity wells.
 2. **Daily seed** — date-seeded daily puzzle (same board for everyone), streak,
    clipboard share card.
 3. **Audio** — ✅ done (see the Audio section above). `flutter_soloud` hybrid:

@@ -14,12 +14,13 @@ import 'dart:math';
 /// solution doesn't use. → infinite, always-solvable puzzles.
 /// Special mechanics that can be woven into the core puzzle. Each unlocks at a
 /// skill-gate level (below), or can be forced on for testing via the dev menu.
-enum PuzzleFeature { wormhole, massGate }
+enum PuzzleFeature { wormhole, massGate, gravityWell }
 
 /// Levels below these never spawn the feature — they unlock as skill gates so
 /// players meet them only after the basic trace is second nature.
-const int kWormholeLevel = 4;
-const int kMassGateLevel = 7;
+const int kWormholeLevel    = 4;
+const int kMassGateLevel    = 7;
+const int kGravityWellLevel = 10;
 
 class PuzzleGrid {
   final int size;                 // square board: size × size
@@ -29,6 +30,10 @@ class PuzzleGrid {
   final Map<int, int> wormholes;  // symmetric cell<->twin links (teleport edges)
   final Map<int, int> gates;      // edgeKey -> key id that opens it
   final Map<int, int> keys;       // cell -> key id (the "boson" collectible)
+  final Map<int, int> wells;      // cell -> direction delta (gravity-well launch)
+
+  /// How many cells a gravity well flings you (in addition to the well cell).
+  static const int wellRange = 2;
 
   PuzzleGrid({
     required this.size,
@@ -38,7 +43,11 @@ class PuzzleGrid {
     this.wormholes = const {},
     this.gates = const {},
     this.keys = const {},
+    this.wells = const {},
   });
+
+  /// Launch direction delta for the well on [cell], or null.
+  int? wellDir(int cell) => wells[cell];
 
   bool isWormhole(int cell)   => wormholes.containsKey(cell);
   int? wormholeTwin(int cell) => wormholes[cell];
@@ -91,6 +100,8 @@ class PuzzleGrid {
         ?? (level >= kWormholeLevel);
     final wantGate = force?.contains(PuzzleFeature.massGate)
         ?? (level >= kMassGateLevel);
+    final wantWell = force?.contains(PuzzleFeature.gravityWell)
+        ?? (level >= kGravityWellLevel);
 
     var sol = _hamiltonian(size, r) ?? _snake(size);
 
@@ -145,6 +156,7 @@ class PuzzleGrid {
     // by construction, and the gate is a genuine routing detour.
     final gates = <int, int>{};   // edgeKey -> key id
     final keys  = <int, int>{};   // cell    -> key id
+    final usedPos = <int>{...wormPositions, ...idx};  // positions off-limits to wells
     if (wantGate) {
       final msPos = idx.toSet();                 // milestone solution positions
       final gateCands = <int>[];                 // edge positions in the back half
@@ -164,7 +176,36 @@ class PuzzleGrid {
           final q = keyCands[r.nextInt((keyCands.length / 2).ceil())];
           gates[edgeKey(sol[p], sol[p + 1], n)] = 0;
           keys[sol[q]] = 0;
+          usedPos.addAll([p, p + 1, q]);          // keep wells clear of the gate/boson
         }
+      }
+    }
+
+    // ── Gravity well (skill-gated) ───────────────────────────────────────────
+    // A well flings the worldline `wellRange` cells in a fixed direction. We
+    // place it where the solution already runs straight for that many steps, so
+    // the launch corridor is exactly the solution's next cells → guaranteed
+    // clear when reached, and solvable by construction. The arrow telegraphs the
+    // launch so the player aims their approach.
+    final wells = <int, int>{};   // cell -> direction delta
+    if (wantWell) {
+      final cands = <int>[];      // solution start-indices of a straight run
+      for (var i = 1; i + wellRange <= n - 2; i++) {
+        final d = sol[i + 1] - sol[i];
+        var straight = true;
+        for (var s = 0; s < wellRange; s++) {
+          if (sol[i + s + 1] - sol[i + s] != d || !adj(sol[i + s], sol[i + s + 1])) {
+            straight = false; break;
+          }
+        }
+        if (!straight) continue;
+        // none of the well/corridor positions may overlap another feature
+        if (List.generate(wellRange + 1, (s) => i + s).any(usedPos.contains)) continue;
+        cands.add(i);
+      }
+      if (cands.isNotEmpty) {
+        final i = cands[r.nextInt(cands.length)];
+        wells[sol[i]] = sol[i + 1] - sol[i];
       }
     }
 
@@ -189,7 +230,7 @@ class PuzzleGrid {
 
     return PuzzleGrid(
       size: size, solution: sol, milestones: ms, walls: walls,
-      wormholes: wormholes, gates: gates, keys: keys);
+      wormholes: wormholes, gates: gates, keys: keys, wells: wells);
   }
 
   /// Randomized Hamiltonian path via Warnsdorff's heuristic with random restarts.
