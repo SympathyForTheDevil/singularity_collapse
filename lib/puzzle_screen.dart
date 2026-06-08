@@ -27,6 +27,8 @@ class _PuzzleScreenState extends State<PuzzleScreen>
   int  solvedCount = 0;
   bool solved      = false;
   bool _showShare  = false;
+  bool _paused     = false;
+  bool _muted      = AudioService.instance.muted;
   int  _streak     = 0;
 
   // Timer
@@ -88,7 +90,7 @@ class _PuzzleScreenState extends State<PuzzleScreen>
     _timer?.cancel();
     _seconds = 0;
     _timer = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (mounted && !solved) setState(() => _seconds++);
+      if (mounted && !solved && !_paused) setState(() => _seconds++);
     });
   }
 
@@ -226,7 +228,7 @@ class _PuzzleScreenState extends State<PuzzleScreen>
   }
 
   void _onPan(Offset local) {
-    if (solved) return;
+    if (solved || _paused) return;
     final cell = _cellAt(local);
     if (cell == null || cell == path.last) return;
 
@@ -263,10 +265,27 @@ class _PuzzleScreenState extends State<PuzzleScreen>
 
   /// Tap a visited cell to rewind the worldline to it. Tapping elsewhere does nothing.
   void _onTap(Offset local) {
-    if (solved) return;
+    if (solved || _paused) return;
     final cell = _cellAt(local);
     if (cell == null) return;
     if (path.contains(cell)) _truncateTo(cell);
+  }
+
+  void _togglePause() {
+    if (solved) return;
+    AudioService.instance.ui();
+    setState(() => _paused = !_paused);
+    if (_paused) {
+      AudioService.instance.stopAmbient();
+    } else {
+      AudioService.instance.startAmbient(calm: _isZen);
+    }
+  }
+
+  Future<void> _toggleMute() async {
+    await AudioService.instance.setMuted(!_muted);
+    if (mounted) setState(() => _muted = AudioService.instance.muted);
+    AudioService.instance.ui();   // audible only when now un-muted — a confirm
   }
 
   void _onSolved() {
@@ -329,95 +348,101 @@ class _PuzzleScreenState extends State<PuzzleScreen>
           SafeArea(
             child: Column(
               children: [
-                // ── Top bar ────────────────────────────────────────────────
+                // ── Top bar: home · centered title · pause + mute ───────────
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(14, 10, 14, 2),
-                  child: Row(
-                    children: [
-                      // Left: back to menu / home
-                      _iconBtn(
-                        _isDaily ? Icons.arrow_back_ios_new : Icons.home_outlined,
-                        () => Navigator.pop(context)),
-
-                      const Spacer(),
-
-                      // Centre: title + stats + timer
-                      Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            _isDaily ? 'DAILY REGION  ·  $dateStr'
-                              : _isZen ? 'ZEN  ·  STAGE $level'
-                              : 'COLLAPSE  ·  STAGE $level',
-                            style: const TextStyle(
-                              color: _accent, fontSize: 15,
-                              fontFamily: 'monospace', letterSpacing: 3,
-                              fontWeight: FontWeight.bold,
-                              shadows: [Shadow(color: Color(0x66ffc24d), blurRadius: 12)])),
-                          const SizedBox(height: 2),
-                          Text(
-                            _isDaily
-                              ? '$filled / $total  CONSUMED'
-                              : '$filled / $total  CONSUMED   ·   SOLVED  $solvedCount',
-                            style: const TextStyle(
-                              color: Color(0xff44607a), fontSize: 9,
-                              fontFamily: 'monospace', letterSpacing: 2)),
-                        ],
-                      ),
-
-                      const Spacer(),
-
-                      // Right: path controls — undo one step, reset to start
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          _iconBtn(Icons.undo, _undo,
-                            enabled: !solved && path.length > 1),
-                          const SizedBox(width: 8),
-                          _iconBtn(Icons.refresh, _reset,
-                            enabled: !solved && path.length > 1),
-                        ],
-                      ),
-                    ],
+                  padding: const EdgeInsets.fromLTRB(14, 12, 14, 4),
+                  child: SizedBox(
+                    height: 44,
+                    child: Stack(
+                      children: [
+                        // Padded so the screen-centered title never collides
+                        // with the corner buttons; scales down if it's long.
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 100),
+                          child: Center(
+                            child: FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: Text(
+                                _isDaily ? 'DAILY  ·  $dateStr'
+                                  : _isZen ? 'ZEN  ·  STAGE $level'
+                                  : 'COLLAPSE  ·  STAGE $level',
+                                style: const TextStyle(
+                                  color: _accent, fontSize: 18,
+                                  fontFamily: 'monospace', letterSpacing: 4,
+                                  fontWeight: FontWeight.bold,
+                                  shadows: [Shadow(color: Color(0x66ffc24d), blurRadius: 14)])),
+                            ),
+                          ),
+                        ),
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: _iconBtn(
+                            _isDaily ? Icons.arrow_back_ios_new : Icons.home_outlined,
+                            () => Navigator.pop(context)),
+                        ),
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              _iconBtn(Icons.pause_rounded, _togglePause,
+                                enabled: !solved),
+                              const SizedBox(width: 8),
+                              _iconBtn(
+                                _muted ? Icons.volume_off_rounded
+                                       : Icons.volume_up_rounded,
+                                _toggleMute),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
 
-                // Timer — full-width row, prominent; hidden in zen mode
-                if (!_isZen)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 6, bottom: 2),
-                    child: Text(
-                      _formatTime(_seconds),
-                      style: const TextStyle(
-                        color: Color(0xff5599bb),
-                        fontSize: 26,
-                        fontFamily: 'monospace',
-                        letterSpacing: 6,
-                        fontWeight: FontWeight.w300,
-                        shadows: [Shadow(color: Color(0x445599bb), blurRadius: 12)]),
-                    ),
-                  ),
-
-                // Next-target hint — also surfaces transient rule hints (e.g.
-                // why the Black Hole can't be entered yet).
+                // ── Info block — bigger, brighter, breathing room ───────────
                 Padding(
-                  padding: const EdgeInsets.only(top: 2, bottom: 2),
-                  child: Text(
-                    _hint != null
-                      ? _hint!
-                      : solved
-                        ? 'REGION COLLAPSED'
-                        : 'NEXT  ·  ${nextTier.name.toUpperCase()}',
-                    style: TextStyle(
-                      color: _hint != null
-                        ? const Color(0xffff4466)
-                        : solved ? Colors.white : nextTier.color,
-                      fontSize: 10, fontFamily: 'monospace', letterSpacing: 3,
-                      shadows: [Shadow(
-                        color: (_hint != null
+                  padding: const EdgeInsets.fromLTRB(20, 14, 20, 6),
+                  child: Column(
+                    children: [
+                      Text(
+                        _isDaily
+                          ? '$filled / $total  CONSUMED'
+                          : '$filled / $total  CONSUMED      SOLVED  $solvedCount',
+                        style: const TextStyle(
+                          color: Color(0xff8aa6bc), fontSize: 12,
+                          fontFamily: 'monospace', letterSpacing: 2)),
+                      if (!_isZen) ...[
+                        const SizedBox(height: 12),
+                        Text(
+                          _formatTime(_seconds),
+                          style: const TextStyle(
+                            color: Color(0xff6fb0d0), fontSize: 32,
+                            fontFamily: 'monospace', letterSpacing: 6,
+                            fontWeight: FontWeight.w300,
+                            shadows: [Shadow(color: Color(0x445599bb), blurRadius: 14)]),
+                        ),
+                      ],
+                      const SizedBox(height: 12),
+                      Text(
+                        _hint != null
+                          ? _hint!
+                          : solved
+                            ? 'REGION COLLAPSED'
+                            : 'NEXT  ·  ${nextTier.name.toUpperCase()}',
+                        style: TextStyle(
+                          color: _hint != null
                             ? const Color(0xffff4466)
-                            : nextTier.color).withValues(alpha: 0.5),
-                        blurRadius: 8)]),
+                            : solved ? Colors.white : nextTier.color,
+                          fontSize: 14, fontFamily: 'monospace', letterSpacing: 3,
+                          fontWeight: FontWeight.bold,
+                          shadows: [Shadow(
+                            color: (_hint != null
+                                ? const Color(0xffff4466)
+                                : nextTier.color).withValues(alpha: 0.55),
+                            blurRadius: 10)]),
+                      ),
+                    ],
                   ),
                 ),
 
@@ -453,11 +478,26 @@ class _PuzzleScreenState extends State<PuzzleScreen>
                   ),
                 ),
 
+                // ── Control bar — undo / reset (bigger, fills the lower space) ─
+                Padding(
+                  padding: const EdgeInsets.only(top: 12, bottom: 4),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      _ctrlBtn(Icons.undo, 'UNDO', _undo,
+                        enabled: !solved && path.length > 1),
+                      const SizedBox(width: 18),
+                      _ctrlBtn(Icons.refresh, 'RESET', _reset,
+                        enabled: !solved && path.length > 1),
+                    ],
+                  ),
+                ),
+
                 // ── Footer ─────────────────────────────────────────────────
                 const Padding(
-                  padding: EdgeInsets.fromLTRB(24, 6, 24, 10),
+                  padding: EdgeInsets.fromLTRB(24, 4, 24, 10),
                   child: Text(
-                    'Drag one path · consume objects in order · fill every cell · finish on the black hole',
+                    'consume objects in order · fill every cell · finish on the black hole',
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       color: Color(0xff3a526a), fontSize: 9.5,
@@ -467,12 +507,67 @@ class _PuzzleScreenState extends State<PuzzleScreen>
             ),
           ),
 
+          // ── Pause overlay — blocks out the entire puzzle ────────────────
+          if (_paused) _buildPauseOverlay(),
+
           // ── Share overlay (daily mode, after solve) ─────────────────────
           if (_showShare) _buildShareOverlay(),
         ],
       ),
     );
   }
+
+  /// Fully opaque overlay so the board can't be studied while paused.
+  Widget _buildPauseOverlay() => Positioned.fill(
+    child: Container(
+      color: const Color(0xff04050a),
+      child: SafeArea(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            AnimatedBuilder(
+              animation: _pulse,
+              builder: (_, _) {
+                final v = sin(_pulse.value * 2 * pi) * 0.5 + 0.5;
+                return Container(
+                  width: 64, height: 64,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: Colors.black,
+                    border: Border.all(color: const Color(0xffbb55ff), width: 2),
+                    boxShadow: [BoxShadow(
+                      color: const Color(0xffbb55ff).withValues(alpha: 0.22 + v * 0.22),
+                      blurRadius: 20 + v * 12, spreadRadius: 2 + v * 4)],
+                  ),
+                );
+              },
+            ),
+            const SizedBox(height: 28),
+            const Text('PAUSED',
+              style: TextStyle(
+                color: Colors.white, fontSize: 26, fontFamily: 'monospace',
+                fontWeight: FontWeight.bold, letterSpacing: 6,
+                shadows: [Shadow(color: Color(0xffbb55ff), blurRadius: 20)])),
+            if (!_isZen) ...[
+              const SizedBox(height: 8),
+              Text(_formatTime(_seconds),
+                style: const TextStyle(
+                  color: Color(0xff6699bb), fontSize: 14,
+                  fontFamily: 'monospace', letterSpacing: 3)),
+            ],
+            const SizedBox(height: 36),
+            _overlayBtn('RESUME', _accent, _togglePause),
+            const SizedBox(height: 12),
+            _overlayBtn(_muted ? 'UNMUTE' : 'MUTE', const Color(0xff7799aa),
+              _toggleMute),
+            const SizedBox(height: 12),
+            _overlayBtn('HOME', const Color(0xff7799aa),
+              () => Navigator.pop(context)),
+          ],
+        ),
+      ),
+    ),
+  );
 
   Widget _buildShareOverlay() {
     final shareText = _buildShareText();
@@ -568,6 +663,35 @@ class _PuzzleScreenState extends State<PuzzleScreen>
           color: Color(enabled ? 0xff7799aa : 0xff35485a), size: 20),
       ),
     );
+
+  /// Larger labelled control for the lower bar (undo / reset).
+  Widget _ctrlBtn(IconData icon, String label, VoidCallback onTap,
+      {bool enabled = true}) {
+    final c = Color(enabled ? 0xff7799aa : 0xff35485a);
+    return GestureDetector(
+      onTap: enabled ? onTap : null,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
+        decoration: BoxDecoration(
+          color: const Color(0xff0a1018),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: Color(enabled ? 0xff223344 : 0xff15202c), width: 1.5),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, color: c, size: 18),
+            const SizedBox(width: 8),
+            Text(label,
+              style: TextStyle(
+                color: c, fontSize: 12, fontFamily: 'monospace',
+                fontWeight: FontWeight.bold, letterSpacing: 2)),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _PuzzlePainter extends CustomPainter {

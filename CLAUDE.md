@@ -121,7 +121,11 @@ A cell is steppable iff:
   finger reaches the cell's interior (`_deepInside`, `_undoMargin = 0.34`). This
   gates *only the undo*, so a fast swipe grazing the previous cell's edge won't
   trigger a spurious backtrack while drawing stays fluid.
-- **Undo button** (top-right) steps back one; **Reset** clears to the start cell.
+- **Undo** / **Reset** live in a labelled control bar below the board (using the
+  lower dead space); Undo steps back one, Reset clears to the start cell.
+- **Pause** (top-right) freezes the timer and input and drops a fully-opaque
+  overlay that blocks the board (resume / mute / home). **Mute** is also in the
+  top bar (in-game), mirroring the home-screen toggle and the persisted setting.
 - **Tap any visited cell** to rewind the worldline to it (`_truncateTo`) — the
   fast fix for an early mistake without dragging all the way back.
 - **Black-hole-early feedback:** attempting to enter the Black Hole before the
