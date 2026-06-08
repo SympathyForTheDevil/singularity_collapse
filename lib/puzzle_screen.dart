@@ -6,15 +6,14 @@ import 'cosmic.dart';
 import 'daily_service.dart';
 import 'puzzle_model.dart';
 
-enum PuzzleMode { daily, infinity }
+enum PuzzleMode { daily, infinity, zen }
 
 /// Singularity: Collapse — the standalone puzzle. Drag one worldline that
 /// consumes cosmic objects in ascending order and fills every cell; reaching
 /// the Black Hole (the final cell) collapses the region into a larger one.
 class PuzzleScreen extends StatefulWidget {
   final PuzzleMode mode;
-  final bool zenMode;
-  const PuzzleScreen({super.key, this.mode = PuzzleMode.infinity, this.zenMode = false});
+  const PuzzleScreen({super.key, this.mode = PuzzleMode.infinity});
   @override
   State<PuzzleScreen> createState() => _PuzzleScreenState();
 }
@@ -40,7 +39,8 @@ class _PuzzleScreenState extends State<PuzzleScreen>
 
   static const Color _accent = Color(0xffffc24d);
 
-  bool get _isDaily   => widget.mode == PuzzleMode.daily;
+  bool get _isDaily => widget.mode == PuzzleMode.daily;
+  bool get _isZen   => widget.mode == PuzzleMode.zen;
 
   @override
   void initState() {
@@ -173,7 +173,7 @@ class _PuzzleScreenState extends State<PuzzleScreen>
     final buf     = StringBuffer()
       ..writeln('Singularity: Collapse')
       ..writeln('Daily Region $today ✅');
-    if (!widget.zenMode) buf.writeln('Time: ${_formatTime(_seconds)}');
+    if (!_isZen) buf.writeln('Time: ${_formatTime(_seconds)}');
     if (_streak > 0) buf.writeln('Streak 🔥 $_streak');
     buf.writeln();
     for (var r = 0; r < grid.size; r++) {
@@ -237,8 +237,8 @@ class _PuzzleScreenState extends State<PuzzleScreen>
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Text(
-                            _isDaily
-                              ? 'DAILY REGION  ·  $dateStr'
+                            _isDaily ? 'DAILY REGION  ·  $dateStr'
+                              : _isZen ? 'ZEN  ·  STAGE $level'
                               : 'COLLAPSE  ·  STAGE $level',
                             style: const TextStyle(
                               color: _accent, fontSize: 15,
@@ -268,7 +268,7 @@ class _PuzzleScreenState extends State<PuzzleScreen>
                 ),
 
                 // Timer — full-width row, prominent; hidden in zen mode
-                if (!widget.zenMode)
+                if (!_isZen)
                   Padding(
                     padding: const EdgeInsets.only(top: 6, bottom: 2),
                     child: Text(
@@ -361,7 +361,7 @@ class _PuzzleScreenState extends State<PuzzleScreen>
                 fontWeight: FontWeight.bold, letterSpacing: 4,
                 shadows: [Shadow(color: Color(0xffbb55ff), blurRadius: 20)])),
 
-            if (!widget.zenMode && _seconds > 0) ...[
+            if (!_isZen && _seconds > 0) ...[
               const SizedBox(height: 6),
               Text(_formatTime(_seconds),
                 style: const TextStyle(

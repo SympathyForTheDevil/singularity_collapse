@@ -12,7 +12,6 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateMixin {
   bool _solvedToday = false;
   int  _streak      = 0;
-  bool _zenMode     = false;
   bool _loaded      = false;
 
   late final AnimationController _pulse;
@@ -38,33 +37,22 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   Future<void> _load() async {
     final solved = await DailyService.isSolvedToday();
     final streak = await DailyService.getStreak();
-    final zen    = await DailyService.getZenMode();
     if (mounted) {
-      setState(() {
-        _solvedToday = solved;
-        _streak      = streak;
-        _zenMode     = zen;
-        _loaded      = true;
-      });
+      setState(() { _solvedToday = solved; _streak = streak; _loaded = true; });
     }
-  }
-
-  Future<void> _toggleZen() async {
-    final next = !_zenMode;
-    await DailyService.setZenMode(next);
-    if (mounted) setState(() => _zenMode = next);
   }
 
   Future<void> _goDaily() async {
     await Navigator.push(context, MaterialPageRoute(
-      builder: (_) => PuzzleScreen(mode: PuzzleMode.daily, zenMode: _zenMode)));
+      builder: (_) => const PuzzleScreen(mode: PuzzleMode.daily)));
     _load();
   }
 
-  void _goInfinity() {
-    Navigator.push(context, MaterialPageRoute(
-      builder: (_) => PuzzleScreen(mode: PuzzleMode.infinity, zenMode: _zenMode)));
-  }
+  void _goInfinity() => Navigator.push(context, MaterialPageRoute(
+    builder: (_) => const PuzzleScreen(mode: PuzzleMode.infinity)));
+
+  void _goZen() => Navigator.push(context, MaterialPageRoute(
+    builder: (_) => const PuzzleScreen(mode: PuzzleMode.zen)));
 
   @override
   Widget build(BuildContext context) {
@@ -145,57 +133,12 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                     _menuBtn('INFINITY MODE',
                       color: const Color(0xff44aaff),
                       onTap: _goInfinity),
+                    const SizedBox(height: 14),
 
-                    const SizedBox(height: 28),
-
-                    // Zen mode toggle
-                    GestureDetector(
-                      onTap: _loaded ? _toggleZen : null,
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text('ZEN MODE',
-                            style: TextStyle(
-                              color: _zenMode ? _cyan : const Color(0xff3a526a),
-                              fontSize: 10, fontFamily: 'monospace', letterSpacing: 3,
-                              shadows: _zenMode
-                                ? [const Shadow(color: Color(0x4499eeff), blurRadius: 8)]
-                                : null)),
-                          const SizedBox(width: 12),
-                          // Pill toggle
-                          AnimatedContainer(
-                            duration: const Duration(milliseconds: 200),
-                            width: 32, height: 18,
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(9),
-                              color: _zenMode
-                                ? _cyan.withValues(alpha: 0.15)
-                                : const Color(0xff0a1018),
-                              border: Border.all(
-                                color: _zenMode
-                                  ? _cyan.withValues(alpha: 0.55)
-                                  : const Color(0xff223344),
-                                width: 1.5)),
-                            child: AnimatedAlign(
-                              duration: const Duration(milliseconds: 200),
-                              curve: Curves.easeInOut,
-                              alignment: _zenMode
-                                ? Alignment.centerRight
-                                : Alignment.centerLeft,
-                              child: Padding(
-                                padding: const EdgeInsets.all(2.5),
-                                child: Container(
-                                  width: 11, height: 11,
-                                  decoration: BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    color: _zenMode ? _cyan : const Color(0xff3a526a)),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
+                    // Zen button
+                    _menuBtn('ZEN MODE',
+                      color: _cyan,
+                      onTap: _goZen),
                   ],
                 ),
               ),
