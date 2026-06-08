@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'audio.dart';
 import 'cosmic.dart';
 import 'daily_service.dart';
 import 'puzzle_model.dart';
@@ -69,10 +70,12 @@ class _PuzzleScreenState extends State<PuzzleScreen>
         }
       });
     _newPuzzle();
+    AudioService.instance.startAmbient(calm: _isZen);
   }
 
   @override
   void dispose() {
+    AudioService.instance.stopAmbient();
     _timer?.cancel();
     _hintTimer?.cancel();
     _pulse.dispose();
@@ -175,6 +178,7 @@ class _PuzzleScreenState extends State<PuzzleScreen>
     if (now - _lastNudgeMs < 700) return;   // throttle repeated bumps
     _lastNudgeMs = now;
     HapticFeedback.heavyImpact();
+    AudioService.instance.denied();
     _nudge.forward(from: 0);
     _showHint('CONSUME EVERY CELL FIRST');
   }
@@ -239,11 +243,16 @@ class _PuzzleScreenState extends State<PuzzleScreen>
     }
 
     if (_canStep(cell)) {
-      final isMs = grid.milestones.containsKey(cell);
+      final isMs    = grid.milestones.containsKey(cell);
+      final mnum    = grid.milestones[cell];
+      final isLower = isMs && mnum != grid.milestoneCount;
       path.add(cell);
       HapticFeedback.lightImpact();
-      if (isMs && grid.milestones[cell] != grid.milestoneCount) {
+      if (isLower) {
         HapticFeedback.selectionClick();
+        AudioService.instance.milestone(mnum!);
+      } else if (!isMs) {
+        AudioService.instance.step(path.length / grid.cellCount);
       }
       if (path.length == grid.cellCount) _onSolved();
       setState(() {});
@@ -264,6 +273,7 @@ class _PuzzleScreenState extends State<PuzzleScreen>
     _stopTimer();
     solved = true;
     HapticFeedback.heavyImpact();
+    AudioService.instance.collapse();
     _solve.forward(from: 0);
   }
 

@@ -1,5 +1,6 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
+import 'audio.dart';
 import 'daily_service.dart';
 import 'puzzle_screen.dart';
 
@@ -13,6 +14,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   bool _solvedToday = false;
   int  _streak      = 0;
   bool _loaded      = false;
+  bool _muted       = AudioService.instance.muted;
 
   late final AnimationController _pulse;
 
@@ -43,16 +45,29 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   }
 
   Future<void> _goDaily() async {
+    AudioService.instance.ui();
     await Navigator.push(context, MaterialPageRoute(
       builder: (_) => const PuzzleScreen(mode: PuzzleMode.daily)));
     _load();
   }
 
-  void _goInfinity() => Navigator.push(context, MaterialPageRoute(
-    builder: (_) => const PuzzleScreen(mode: PuzzleMode.infinity)));
+  void _goInfinity() {
+    AudioService.instance.ui();
+    Navigator.push(context, MaterialPageRoute(
+      builder: (_) => const PuzzleScreen(mode: PuzzleMode.infinity)));
+  }
 
-  void _goZen() => Navigator.push(context, MaterialPageRoute(
-    builder: (_) => const PuzzleScreen(mode: PuzzleMode.zen)));
+  void _goZen() {
+    AudioService.instance.ui();
+    Navigator.push(context, MaterialPageRoute(
+      builder: (_) => const PuzzleScreen(mode: PuzzleMode.zen)));
+  }
+
+  Future<void> _toggleMute() async {
+    await AudioService.instance.setMuted(!_muted);
+    if (mounted) setState(() => _muted = AudioService.instance.muted);
+    AudioService.instance.ui();   // audible only when now un-muted — a confirm
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -60,7 +75,27 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     return Scaffold(
       backgroundColor: const Color(0xff04050a),
       body: SafeArea(
-        child: Column(
+        child: Stack(
+          children: [
+            // ── Mute toggle (top-right) ─────────────────────────────────────
+            Positioned(
+              top: 8, right: 12,
+              child: GestureDetector(
+                onTap: _toggleMute,
+                child: Container(
+                  width: 40, height: 40,
+                  decoration: BoxDecoration(
+                    color: const Color(0xff0a1018),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: const Color(0xff223344), width: 1),
+                  ),
+                  child: Icon(
+                    _muted ? Icons.volume_off_rounded : Icons.volume_up_rounded,
+                    color: _muted ? const Color(0xff35485a) : _cyan, size: 20),
+                ),
+              ),
+            ),
+            Column(
           children: [
             // ── Centred content ─────────────────────────────────────────────
             Expanded(
@@ -152,6 +187,8 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                 color: Color(0xff3a526a), fontSize: 9,
                 fontFamily: 'monospace', letterSpacing: 1)),
             const SizedBox(height: 20),
+          ],
+            ),
           ],
         ),
       ),

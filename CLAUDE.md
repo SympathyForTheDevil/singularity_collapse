@@ -54,9 +54,30 @@ first cell; the top milestone (Black Hole) is pinned to the LAST cell. The rule
 engine only allows entering the Black Hole when it is the final remaining cell
 (`path.length == cellCount - 1`). This is the core fix over the prototype.
 
-**No audio yet.** Haptics only (selectionClick per step, lightImpact on milestone,
-heavyImpact on solve). Audio is a planned addition; avoid adding native plugins
-without updating this doc and the CI workflow.
+**Audio (`lib/audio.dart`).** Hybrid engine on `flutter_soloud` (4.x, standard
+`ffiPlugin` — CMake/podspec, builds on the existing CI unchanged). Haptics are
+kept and layered with sound. `AudioService` is a singleton, inited fire-and-forget
+in `main()` and **fails silently** if the engine is unavailable (never blocks the
+game). All sounds are synthesised procedurally into in-memory PCM WAV and played
+through a global Freeverb send for a cosmic space:
+
+- **Milestone ladder** — each consumed cosmic object plays an ascending major-
+  pentatonic bell (`milestone(n)`), so a full solve plays a little melody.
+- **Step tick** — quiet blip per cell, pitch brightening with path progress.
+- **Denied** — soft dissonant low tone on the black-hole-early nudge.
+- **Collapse** — layered stinger (sub-bass implosion → boom + flash burst at
+  ~0.8s → inharmonic shimmer tail) synced to the 2 s collapse animation. This is
+  the designed "impact one-shot" slot: to swap in a produced sample, drop a file
+  in `assets/audio/` and load it in `_buildSounds` via `_soloud.loadAsset(...)`.
+- **Ambient pad** — seamless 8 s loop (all partials loop-locked to 1/dur), faded
+  in per screen; calmer in Zen. Started in `PuzzleScreen.initState`, stopped in
+  `dispose`.
+- **Mute** — toggle on the home screen, persisted via `shared_preferences`
+  (`audio_muted`); `AudioService.muted` is honoured by every play call.
+
+Keep everything procedural/asset-free unless deliberately adding a designed
+sample (then update this doc). The reverb setup is wrapped in its own try/catch
+so a filter hiccup never costs the dry audio.
 
 **Portrait only.** Locked in `main.dart`. Do not add landscape.
 
@@ -168,11 +189,11 @@ for an unsigned (debug-signed) fallback that still installs fine for testing.
    (momentum lock: forces next move in a fixed direction), hunter enemy.
 2. **Daily seed** — date-seeded daily puzzle (same board for everyone), streak,
    clipboard share card.
-3. **Audio** (next up) — procedural tones on milestone absorption, a stage-up
-   sting on collapse. Avoid asset files; keep everything procedural. Adding the
-   audio plugin will require updating this doc and the CI workflow. (Deferred
-   from the Phase 0 polish pass, which shipped the staged collapse + zoom-out,
-   undo/tap-to-rewind, the input deadzone, and black-hole-early feedback.)
+3. **Audio** — ✅ done (see the Audio section above). `flutter_soloud` hybrid:
+   procedural pentatonic milestone ladder, step ticks, denied tone, layered
+   collapse stinger, looping ambient pad, global reverb, mute toggle. Possible
+   follow-ups: swap the collapse/shimmer for produced samples; per-mode music
+   intensity; a fuller settings screen (volume slider, separate SFX/music).
 4. **Menu / level select** — a proper home screen with solved-count display
    and level progression indicators.
 5. **Android signing** — generate `collapse-release.jks`, set the four CI
