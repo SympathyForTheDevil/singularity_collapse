@@ -34,6 +34,16 @@ class DailyService {
     return prefs.getInt(_keyStreak) ?? 0;
   }
 
+  static Future<bool> getZenMode() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool('zen_mode') ?? false;
+  }
+
+  static Future<void> setZenMode(bool zen) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('zen_mode', zen);
+  }
+
   /// Marks today solved, updates streak, returns new streak value.
   static Future<int> markSolvedAndGetStreak() async {
     final prefs     = await SharedPreferences.getInstance();

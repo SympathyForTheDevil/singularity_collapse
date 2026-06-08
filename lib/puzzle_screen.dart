@@ -6,14 +6,15 @@ import 'cosmic.dart';
 import 'daily_service.dart';
 import 'puzzle_model.dart';
 
-enum PuzzleMode { daily, endless }
+enum PuzzleMode { daily, infinity }
 
 /// Singularity: Collapse — the standalone puzzle. Drag one worldline that
 /// consumes cosmic objects in ascending order and fills every cell; reaching
 /// the Black Hole (the final cell) collapses the region into a larger one.
 class PuzzleScreen extends StatefulWidget {
   final PuzzleMode mode;
-  const PuzzleScreen({super.key, this.mode = PuzzleMode.endless});
+  final bool zenMode;
+  const PuzzleScreen({super.key, this.mode = PuzzleMode.infinity, this.zenMode = false});
   @override
   State<PuzzleScreen> createState() => _PuzzleScreenState();
 }
@@ -30,7 +31,6 @@ class _PuzzleScreenState extends State<PuzzleScreen>
 
   // Timer
   int    _seconds = 0;
-  bool   _zenMode = false;
   Timer? _timer;
 
   late final AnimationController _pulse;
@@ -40,7 +40,7 @@ class _PuzzleScreenState extends State<PuzzleScreen>
 
   static const Color _accent = Color(0xffffc24d);
 
-  bool get _isDaily => widget.mode == PuzzleMode.daily;
+  bool get _isDaily   => widget.mode == PuzzleMode.daily;
 
   @override
   void initState() {
@@ -87,11 +87,9 @@ class _PuzzleScreenState extends State<PuzzleScreen>
   String _formatTime(int s) =>
       '${s ~/ 60}:${(s % 60).toString().padLeft(2, '0')}';
 
-  void _toggleZen() => setState(() => _zenMode = !_zenMode);
-
   void _newPuzzle({bool advance = false}) {
     if (!_isDaily && advance) { level++; solvedCount++; }
-    final rng = _isDaily ? Random(DailyService.todaySeed()) : null;
+    final rng = _isDaily ? Random(DailyService.todaySeed()) : null;  // null → fresh random each puzzle
     final lvl = _isDaily ? DailyService.dailyLevel() : level;
     grid = PuzzleGrid.generate(lvl, rng: rng);
     path
@@ -175,7 +173,7 @@ class _PuzzleScreenState extends State<PuzzleScreen>
     final buf     = StringBuffer()
       ..writeln('Singularity: Collapse')
       ..writeln('Daily Region $today ✅');
-    if (!_zenMode) buf.writeln('Time: ${_formatTime(_seconds)}');
+    if (!widget.zenMode) buf.writeln('Time: ${_formatTime(_seconds)}');
     if (_streak > 0) buf.writeln('Streak 🔥 $_streak');
     buf.writeln();
     for (var r = 0; r < grid.size; r++) {
@@ -255,19 +253,6 @@ class _PuzzleScreenState extends State<PuzzleScreen>
                             style: const TextStyle(
                               color: Color(0xff44607a), fontSize: 9,
                               fontFamily: 'monospace', letterSpacing: 2)),
-                          const SizedBox(height: 1),
-                          // Timer — tap to toggle zen mode
-                          GestureDetector(
-                            onTap: _toggleZen,
-                            child: Text(
-                              _zenMode ? 'ZEN' : _formatTime(_seconds),
-                              style: TextStyle(
-                                color: _zenMode
-                                  ? const Color(0xff2a3d4e)
-                                  : const Color(0xff4a7090),
-                                fontSize: 9, fontFamily: 'monospace',
-                                letterSpacing: 2)),
-                          ),
                         ],
                       ),
 
@@ -281,6 +266,22 @@ class _PuzzleScreenState extends State<PuzzleScreen>
                     ],
                   ),
                 ),
+
+                // Timer — full-width row, prominent; hidden in zen mode
+                if (!widget.zenMode)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 6, bottom: 2),
+                    child: Text(
+                      _formatTime(_seconds),
+                      style: const TextStyle(
+                        color: Color(0xff5599bb),
+                        fontSize: 26,
+                        fontFamily: 'monospace',
+                        letterSpacing: 6,
+                        fontWeight: FontWeight.w300,
+                        shadows: [Shadow(color: Color(0x445599bb), blurRadius: 12)]),
+                    ),
+                  ),
 
                 // Next-target hint
                 Padding(
@@ -360,7 +361,7 @@ class _PuzzleScreenState extends State<PuzzleScreen>
                 fontWeight: FontWeight.bold, letterSpacing: 4,
                 shadows: [Shadow(color: Color(0xffbb55ff), blurRadius: 20)])),
 
-            if (!_zenMode && _seconds > 0) ...[
+            if (!widget.zenMode && _seconds > 0) ...[
               const SizedBox(height: 6),
               Text(_formatTime(_seconds),
                 style: const TextStyle(

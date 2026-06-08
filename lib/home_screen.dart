@@ -12,12 +12,14 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateMixin {
   bool _solvedToday = false;
   int  _streak      = 0;
+  bool _zenMode     = false;
   bool _loaded      = false;
 
   late final AnimationController _pulse;
 
   static const Color _gold   = Color(0xffffc24d);
   static const Color _purple = Color(0xffbb55ff);
+  static const Color _cyan   = Color(0xff99eeff);
 
   @override
   void initState() {
@@ -36,20 +38,32 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   Future<void> _load() async {
     final solved = await DailyService.isSolvedToday();
     final streak = await DailyService.getStreak();
+    final zen    = await DailyService.getZenMode();
     if (mounted) {
-      setState(() { _solvedToday = solved; _streak = streak; _loaded = true; });
+      setState(() {
+        _solvedToday = solved;
+        _streak      = streak;
+        _zenMode     = zen;
+        _loaded      = true;
+      });
     }
+  }
+
+  Future<void> _toggleZen() async {
+    final next = !_zenMode;
+    await DailyService.setZenMode(next);
+    if (mounted) setState(() => _zenMode = next);
   }
 
   Future<void> _goDaily() async {
     await Navigator.push(context, MaterialPageRoute(
-      builder: (_) => const PuzzleScreen(mode: PuzzleMode.daily)));
+      builder: (_) => PuzzleScreen(mode: PuzzleMode.daily, zenMode: _zenMode)));
     _load();
   }
 
-  void _goEndless() {
+  void _goInfinity() {
     Navigator.push(context, MaterialPageRoute(
-      builder: (_) => const PuzzleScreen(mode: PuzzleMode.endless)));
+      builder: (_) => PuzzleScreen(mode: PuzzleMode.infinity, zenMode: _zenMode)));
   }
 
   @override
@@ -105,7 +119,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
 
                     const SizedBox(height: 44),
 
-                    // Streak badge — always occupies space to prevent layout shift
+                    // Streak badge — always in layout to prevent shift
                     AnimatedOpacity(
                       opacity: (_loaded && _streak > 0) ? 1.0 : 0.0,
                       duration: const Duration(milliseconds: 400),
@@ -127,10 +141,61 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                     ),
                     const SizedBox(height: 14),
 
-                    // Endless button
-                    _menuBtn('ENDLESS MODE',
+                    // Infinity button
+                    _menuBtn('INFINITY MODE',
                       color: const Color(0xff44aaff),
-                      onTap: _goEndless),
+                      onTap: _goInfinity),
+
+                    const SizedBox(height: 28),
+
+                    // Zen mode toggle
+                    GestureDetector(
+                      onTap: _loaded ? _toggleZen : null,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text('ZEN MODE',
+                            style: TextStyle(
+                              color: _zenMode ? _cyan : const Color(0xff3a526a),
+                              fontSize: 10, fontFamily: 'monospace', letterSpacing: 3,
+                              shadows: _zenMode
+                                ? [const Shadow(color: Color(0x4499eeff), blurRadius: 8)]
+                                : null)),
+                          const SizedBox(width: 12),
+                          // Pill toggle
+                          AnimatedContainer(
+                            duration: const Duration(milliseconds: 200),
+                            width: 32, height: 18,
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(9),
+                              color: _zenMode
+                                ? _cyan.withValues(alpha: 0.15)
+                                : const Color(0xff0a1018),
+                              border: Border.all(
+                                color: _zenMode
+                                  ? _cyan.withValues(alpha: 0.55)
+                                  : const Color(0xff223344),
+                                width: 1.5)),
+                            child: AnimatedAlign(
+                              duration: const Duration(milliseconds: 200),
+                              curve: Curves.easeInOut,
+                              alignment: _zenMode
+                                ? Alignment.centerRight
+                                : Alignment.centerLeft,
+                              child: Padding(
+                                padding: const EdgeInsets.all(2.5),
+                                child: Container(
+                                  width: 11, height: 11,
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color: _zenMode ? _cyan : const Color(0xff3a526a)),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ],
                 ),
               ),
