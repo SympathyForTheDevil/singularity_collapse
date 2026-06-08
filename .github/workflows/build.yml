@@ -72,7 +72,9 @@ jobs:
       - name: Build release APK
         env:
           GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx1536m -Dorg.gradle.daemon=false"
-        run: flutter build apk --release
+        # build-number = run number so each build has a higher versionCode,
+        # keeping in-place updates clean (paired with stable release signing).
+        run: flutter build apk --release --build-number=${{ github.run_number }}
 
       - name: Rename APK
         run: mv build/app/outputs/flutter-apk/app-release.apk Collapse.apk
@@ -100,7 +102,7 @@ jobs:
         run: flutter pub get
 
       - name: Build iOS (no codesign)
-        run: flutter build ios --release --no-codesign
+        run: flutter build ios --release --no-codesign --build-number=${{ github.run_number }}
 
       - name: Package IPA
         run: |

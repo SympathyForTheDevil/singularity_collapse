@@ -200,5 +200,12 @@ for an unsigned (debug-signed) fallback that still installs fine for testing.
    intensity; a fuller settings screen (volume slider, separate SFX/music).
 4. **Menu / level select** — a proper home screen with solved-count display
    and level progression indicators.
-5. **Android signing** — generate `collapse-release.jks`, set the four CI
-   secrets, update `android/app/build.gradle.kts` signing config.
+5. **Android signing** — ✅ keystore generated (`android/collapse-release.jks`,
+   git-ignored; local creds in `android/key.properties`). `build.gradle.kts`
+   already reads CI env vars / local `key.properties` and verified to produce a
+   release-signed APK (cert CN=Singularity Collapse). **Remaining:** set the four
+   GitHub secrets (KEYSTORE_BASE64, KEY_STORE_PASSWORD, KEY_PASSWORD, KEY_ALIAS;
+   base64 + values in `~/collapse-signing/`) so CI stops debug-signing — debug
+   signatures vary per runner and break in-place updates ("App not installed").
+   The CI also passes `--build-number=${{ github.run_number }}` so each build's
+   versionCode increases. **Keep the keystore + password backed up.**
