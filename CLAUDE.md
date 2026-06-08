@@ -92,7 +92,27 @@ A cell is steppable iff:
 5. If it is the Black Hole (final milestone), `path.length == cellCount - 1` —
    it can only be entered as the absolute last move.
 
-Drag back onto the previous cell to undo the last step.
+## Input & feedback
+
+- **Drag** to trace. A centre deadzone (`_gutter = 0.20`, the outer 20% of each
+  cell is dead) means the finger must commit to a cell's interior before a step
+  registers — kills wobble-induced miss-steps and accidental undos.
+- **Drag back** onto the previous cell undoes the last step.
+- **Undo button** (top-right) steps back one; **Reset** clears to the start cell.
+- **Tap any visited cell** to rewind the worldline to it (`_truncateTo`) — the
+  fast fix for an early mistake without dragging all the way back.
+- **Black-hole-early feedback:** attempting to enter the Black Hole before the
+  region is fully consumed is no longer silently rejected — it fires
+  `_nudgeBlackHole()` (heavy haptic + expanding red ring + the in-context hint
+  "CONSUME EVERY CELL FIRST"), throttled to once per ~700ms.
+
+## Collapse animation
+
+`_solve` (2000ms) drives a staged collapse in `_PuzzlePainter._drawCollapse`:
+implosion (board scales toward the black hole) → white flash → zoom-out where
+the region shrinks to a point and a deterministic starfield is revealed (the
+"this region was one star in a galaxy" beat), with purple shockwave rings and a
+lingering new star at the singularity.
 
 ---
 
@@ -146,8 +166,11 @@ for an unsigned (debug-signed) fallback that still installs fine for testing.
    (momentum lock: forces next move in a fixed direction), hunter enemy.
 2. **Daily seed** — date-seeded daily puzzle (same board for everyone), streak,
    clipboard share card.
-3. **Audio** — procedural tones on milestone absorption, a stage-up sting on
-   collapse. Avoid asset files; keep everything procedural.
+3. **Audio** (next up) — procedural tones on milestone absorption, a stage-up
+   sting on collapse. Avoid asset files; keep everything procedural. Adding the
+   audio plugin will require updating this doc and the CI workflow. (Deferred
+   from the Phase 0 polish pass, which shipped the staged collapse + zoom-out,
+   undo/tap-to-rewind, the input deadzone, and black-hole-early feedback.)
 4. **Menu / level select** — a proper home screen with solved-count display
    and level progression indicators.
 5. **Android signing** — generate `collapse-release.jks`, set the four CI

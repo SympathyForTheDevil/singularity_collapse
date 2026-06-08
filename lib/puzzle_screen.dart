@@ -34,6 +34,12 @@ class _PuzzleScreenState extends State<PuzzleScreen>
 
   late final AnimationController _pulse;
   late final AnimationController _solve;
+  late final AnimationController _nudge;   // black-hole "not yet" warning flash
+
+  // Transient in-context hint shown in the NEXT line (e.g. why a move was blocked).
+  String?  _hint;
+  Timer?   _hintTimer;
+  int      _lastNudgeMs = 0;               // throttle the black-hole nudge
 
   double _boardSize = 320;
 
@@ -47,8 +53,10 @@ class _PuzzleScreenState extends State<PuzzleScreen>
     super.initState();
     _pulse = AnimationController(
       vsync: this, duration: const Duration(milliseconds: 1400))..repeat();
+    _nudge = AnimationController(
+      vsync: this, duration: const Duration(milliseconds: 600));
     _solve = AnimationController(
-      vsync: this, duration: const Duration(milliseconds: 1200))
+      vsync: this, duration: const Duration(milliseconds: 2000))
       ..addStatusListener((s) async {
         if (s == AnimationStatus.completed && mounted) {
           if (_isDaily) {
@@ -66,8 +74,10 @@ class _PuzzleScreenState extends State<PuzzleScreen>
   @override
   void dispose() {
     _timer?.cancel();
+    _hintTimer?.cancel();
     _pulse.dispose();
     _solve.dispose();
+    _nudge.dispose();
     super.dispose();
   }
 
@@ -97,15 +107,76 @@ class _PuzzleScreenState extends State<PuzzleScreen>
       ..add(grid.startCell);
     solved     = false;
     _showShare = false;
+    _clearHint();
+    _nudge.reset();
     _startTimer();
     setState(() {});
   }
 
   void _reset() {
+    if (solved) return;
     path
       ..clear()
       ..add(grid.startCell);
+    _clearHint();
+    HapticFeedback.mediumImpact();
     setState(() {});
+  }
+
+  /// Step back one cell (undo the last move).
+  void _undo() {
+    if (solved || path.length < 2) return;
+    path.removeLast();
+    _clearHint();
+    HapticFeedback.selectionClick();
+    setState(() {});
+  }
+
+  /// Truncate the worldline back to [cell] (drops everything after it). Tapping
+  /// any visited cell rewinds to there — the fast way to fix an early mistake.
+  void _truncateTo(int cell) {
+    if (solved) return;
+    final i = path.indexOf(cell);
+    if (i < 0 || i == path.length - 1) return;
+    path.removeRange(i + 1, path.length);
+    _clearHint();
+    HapticFeedback.selectionClick();
+    setState(() {});
+  }
+
+  void _showHint(String text) {
+    _hintTimer?.cancel();
+    setState(() => _hint = text);
+    _hintTimer = Timer(const Duration(milliseconds: 1600), () {
+      if (mounted) setState(() => _hint = null);
+    });
+  }
+
+  void _clearHint() {
+    _hintTimer?.cancel();
+    if (_hint != null) _hint = null;
+  }
+
+  /// True when [target] is the Black Hole, it is next in milestone order, and is
+  /// reachable — but the region isn't fully consumed yet, so it must wait.
+  bool _isBlackHoleEarly(int target) {
+    final m = grid.milestones[target];
+    if (m == null || m != grid.milestoneCount) return false;
+    if (m != _milestonesVisited() + 1)          return false;
+    final head = path.last;
+    if (!grid.adjacent(head, target))           return false;
+    if (grid.hasWall(head, target))             return false;
+    if (path.contains(target))                  return false;
+    return path.length != grid.cellCount - 1;
+  }
+
+  void _nudgeBlackHole() {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    if (now - _lastNudgeMs < 700) return;   // throttle repeated bumps
+    _lastNudgeMs = now;
+    HapticFeedback.heavyImpact();
+    _nudge.forward(from: 0);
+    _showHint('CONSUME EVERY CELL FIRST');
   }
 
   int _milestonesVisited() =>
@@ -126,13 +197,25 @@ class _PuzzleScreenState extends State<PuzzleScreen>
     return true;
   }
 
-  int? _cellAt(Offset p) {
+  /// Map a local point to a cell. A centre deadzone (the outer [_gutter] of each
+  /// cell is dead) means the finger must commit to a cell's interior before it
+  /// registers — this stops boundary-grazing from spuriously stepping or undoing.
+  static const double _gutter = 0.20;
+
+  int? _cellAt(Offset p, {bool deadzone = true}) {
     final cs = _boardSize / grid.size;
     if (p.dx < 0 || p.dy < 0 || p.dx >= _boardSize || p.dy >= _boardSize) {
       return null;
     }
     final c = (p.dx / cs).floor().clamp(0, grid.size - 1);
     final r = (p.dy / cs).floor().clamp(0, grid.size - 1);
+    if (deadzone) {
+      final fx = p.dx / cs - c, fy = p.dy / cs - r;   // 0..1 within the cell
+      if (fx < _gutter || fx > 1 - _gutter ||
+          fy < _gutter || fy > 1 - _gutter) {
+        return null;                                   // in the gutter — ignore
+      }
+    }
     return r * grid.size + c;
   }
 
@@ -143,6 +226,7 @@ class _PuzzleScreenState extends State<PuzzleScreen>
 
     if (path.length >= 2 && cell == path[path.length - 2]) {
       path.removeLast();
+      _clearHint();
       HapticFeedback.selectionClick();
       setState(() {});
       return;
@@ -157,7 +241,18 @@ class _PuzzleScreenState extends State<PuzzleScreen>
       }
       if (path.length == grid.cellCount) _onSolved();
       setState(() {});
+    } else if (_isBlackHoleEarly(cell)) {
+      _nudgeBlackHole();   // explain the block instead of silently rejecting it
     }
+  }
+
+  /// Tap a visited cell to rewind the worldline to it (no deadzone — taps are
+  /// deliberate). Tapping elsewhere does nothing.
+  void _onTap(Offset local) {
+    if (solved) return;
+    final cell = _cellAt(local, deadzone: false);
+    if (cell == null) return;
+    if (path.contains(cell)) _truncateTo(cell);
   }
 
   void _onSolved() {
@@ -224,11 +319,10 @@ class _PuzzleScreenState extends State<PuzzleScreen>
                   padding: const EdgeInsets.fromLTRB(14, 10, 14, 2),
                   child: Row(
                     children: [
-                      // Left: back to menu (daily) or reset (endless)
-                      _isDaily
-                        ? _iconBtn(Icons.arrow_back_ios_new,
-                            () => Navigator.pop(context))
-                        : _iconBtn(Icons.refresh, _reset),
+                      // Left: back to menu / home
+                      _iconBtn(
+                        _isDaily ? Icons.arrow_back_ios_new : Icons.home_outlined,
+                        () => Navigator.pop(context)),
 
                       const Spacer(),
 
@@ -258,11 +352,17 @@ class _PuzzleScreenState extends State<PuzzleScreen>
 
                       const Spacer(),
 
-                      // Right: home (endless) or zen is already in centre
-                      _isDaily
-                        ? const SizedBox(width: 40)
-                        : _iconBtn(Icons.home_outlined,
-                            () => Navigator.pop(context)),
+                      // Right: path controls — undo one step, reset to start
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          _iconBtn(Icons.undo, _undo,
+                            enabled: !solved && path.length > 1),
+                          const SizedBox(width: 8),
+                          _iconBtn(Icons.refresh, _reset,
+                            enabled: !solved && path.length > 1),
+                        ],
+                      ),
                     ],
                   ),
                 ),
@@ -283,16 +383,26 @@ class _PuzzleScreenState extends State<PuzzleScreen>
                     ),
                   ),
 
-                // Next-target hint
+                // Next-target hint — also surfaces transient rule hints (e.g.
+                // why the Black Hole can't be entered yet).
                 Padding(
                   padding: const EdgeInsets.only(top: 2, bottom: 2),
                   child: Text(
-                    solved ? 'REGION COLLAPSED' : 'NEXT  ·  ${nextTier.name.toUpperCase()}',
+                    _hint != null
+                      ? _hint!
+                      : solved
+                        ? 'REGION COLLAPSED'
+                        : 'NEXT  ·  ${nextTier.name.toUpperCase()}',
                     style: TextStyle(
-                      color: solved ? Colors.white : nextTier.color,
+                      color: _hint != null
+                        ? const Color(0xffff4466)
+                        : solved ? Colors.white : nextTier.color,
                       fontSize: 10, fontFamily: 'monospace', letterSpacing: 3,
                       shadows: [Shadow(
-                        color: nextTier.color.withValues(alpha: 0.5), blurRadius: 8)]),
+                        color: (_hint != null
+                            ? const Color(0xffff4466)
+                            : nextTier.color).withValues(alpha: 0.5),
+                        blurRadius: 8)]),
                   ),
                 ),
 
@@ -305,10 +415,11 @@ class _PuzzleScreenState extends State<PuzzleScreen>
                             .clamp(200.0, 620.0);
                         _boardSize = side;
                         return GestureDetector(
+                          onTapUp:     (d) => _onTap(d.localPosition),
                           onPanStart:  (d) => _onPan(d.localPosition),
                           onPanUpdate: (d) => _onPan(d.localPosition),
                           child: AnimatedBuilder(
-                            animation: Listenable.merge([_pulse, _solve]),
+                            animation: Listenable.merge([_pulse, _solve, _nudge]),
                             builder: (_, _) => CustomPaint(
                               size: Size(side, side),
                               painter: _PuzzlePainter(
@@ -316,6 +427,7 @@ class _PuzzleScreenState extends State<PuzzleScreen>
                                 path: path,
                                 pulse: _pulse.value,
                                 solveT: _solve.value,
+                                nudge: _nudge.value,
                                 accent: _accent,
                               ),
                             ),
@@ -426,25 +538,29 @@ class _PuzzleScreenState extends State<PuzzleScreen>
       ),
     );
 
-  Widget _iconBtn(IconData icon, VoidCallback onTap) => GestureDetector(
-    onTap: onTap,
-    child: Container(
-      width: 40, height: 40,
-      decoration: BoxDecoration(
-        color: const Color(0xff0a1018),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: const Color(0xff223344), width: 1),
+  Widget _iconBtn(IconData icon, VoidCallback onTap, {bool enabled = true}) =>
+    GestureDetector(
+      onTap: enabled ? onTap : null,
+      child: Container(
+        width: 40, height: 40,
+        decoration: BoxDecoration(
+          color: const Color(0xff0a1018),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: Color(enabled ? 0xff223344 : 0xff15202c), width: 1),
+        ),
+        child: Icon(icon,
+          color: Color(enabled ? 0xff7799aa : 0xff35485a), size: 20),
       ),
-      child: Icon(icon, color: const Color(0xff7799aa), size: 20),
-    ),
-  );
+    );
 }
 
 class _PuzzlePainter extends CustomPainter {
   final PuzzleGrid grid;
   final List<int>  path;
   final double     pulse;
-  final double     solveT;
+  final double     solveT;   // 0 → 1 collapse celebration
+  final double     nudge;    // 0 → 1 black-hole "not yet" warning flash
   final Color      accent;
 
   _PuzzlePainter({
@@ -452,8 +568,22 @@ class _PuzzlePainter extends CustomPainter {
     required this.path,
     required this.pulse,
     required this.solveT,
+    required this.nudge,
     required this.accent,
   });
+
+  // ── Collapse timeline ─────────────────────────────────────────────────────
+  // 0.00–0.35  implosion   board contracts toward the black hole
+  // 0.35–0.45  flash       white burst at the singularity
+  // 0.45–1.00  zoom-out    region shrinks to a point; a galaxy is revealed
+  double _collapseScale(double t) {
+    if (t < 0.35) return 1.0 - 0.16 * Curves.easeIn.transform(t / 0.35);
+    if (t < 0.45) return 0.84;
+    return 0.84 * (1 - Curves.easeInCubic.transform((t - 0.45) / 0.55));
+  }
+
+  double _contentAlpha(double t) =>
+      t <= 0.5 ? 1.0 : (1 - (t - 0.5) / 0.35).clamp(0.0, 1.0);
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -463,6 +593,28 @@ class _PuzzlePainter extends CustomPainter {
 
     Offset center(int i) => Offset(
       (grid.colOf(i) + 0.5) * cell, (grid.rowOf(i) + 0.5) * cell);
+
+    final bounds   = Offset.zero & size;
+    final bhCenter = center(grid.blackHoleCell);
+
+    // During the collapse: reveal a starfield behind the board, then scale all
+    // board content down toward the black hole (the region implodes into a
+    // single point of a wider galaxy). A fade layer dissolves the old region.
+    final collapsing   = solveT > 0;
+    final contentAlpha = _contentAlpha(solveT);
+    if (collapsing) {
+      _drawStarfield(canvas, size, ((solveT - 0.4) / 0.3).clamp(0.0, 1.0));
+      final s = _collapseScale(solveT);
+      canvas.save();
+      canvas.translate(bhCenter.dx, bhCenter.dy);
+      canvas.scale(s);
+      canvas.translate(-bhCenter.dx, -bhCenter.dy);
+    }
+    final fadeLayer = collapsing && contentAlpha < 0.99;
+    if (fadeLayer) {
+      canvas.saveLayer(bounds,
+        Paint()..color = Colors.white.withValues(alpha: contentAlpha));
+    }
 
     // Board backdrop
     final rrect = RRect.fromRectAndRadius(
@@ -574,6 +726,17 @@ class _PuzzlePainter extends CustomPainter {
       }
     });
 
+    // ── Black-hole "not yet" warning ────────────────────────────────────────
+    // Expanding red ring when the player tries to enter the Black Hole before
+    // the region is fully consumed (paired with the in-context hint text).
+    if (nudge > 0 && !collapsing) {
+      canvas.drawCircle(bhCenter, cell * (0.55 + 0.5 * nudge),
+        Paint()
+          ..color = const Color(0xffff4466).withValues(alpha: (1 - nudge) * 0.85)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 3 + 2 * (1 - nudge));
+    }
+
     // ── Head orb ──────────────────────────────────────────────────────────
     if (path.isNotEmpty) {
       final head = center(path.last);
@@ -590,20 +753,78 @@ class _PuzzlePainter extends CustomPainter {
       ..color = accent.withValues(alpha: 0.45)
       ..style = PaintingStyle.stroke ..strokeWidth = 1.5);
 
-    // ── Collapse celebration ───────────────────────────────────────────────
-    if (solveT > 0) {
-      final c     = size.center(Offset.zero);
-      final ringR = size.width * 0.9 * Curves.easeOut.transform(solveT);
-      canvas.drawCircle(c, ringR, Paint()
-        ..color = const Color(0xffbb55ff).withValues(alpha: (1 - solveT) * 0.9)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 6 + 10 * (1 - solveT));
-      canvas.drawRRect(rrect, Paint()
-        ..color = Colors.white.withValues(alpha: (1 - solveT) * 0.30));
+    // Close the collapse transform / fade layer.
+    if (fadeLayer)  canvas.restore();
+    if (collapsing) canvas.restore();
 
+    // ── Collapse celebration (screen space, over the imploding region) ──────
+    if (collapsing) _drawCollapse(canvas, size, bhCenter, solveT);
+  }
+
+  /// A deterministic field of distant stars revealed as the region zooms out —
+  /// the "this region was one point in a galaxy" beat.
+  void _drawStarfield(Canvas canvas, Size size, double alpha) {
+    if (alpha <= 0) return;
+    final rnd  = Random(0x5EED);
+    final twin = sin(pulse * 2 * pi);
+    for (var i = 0; i < 80; i++) {
+      final dx   = rnd.nextDouble() * size.width;
+      final dy   = rnd.nextDouble() * size.height;
+      final base = 0.25 + rnd.nextDouble() * 0.75;
+      final r    = 0.5 + rnd.nextDouble() * 1.6;
+      final tw   = 0.7 + 0.3 * sin(twin + i.toDouble());
+      final col  = i.isEven ? Colors.white : const Color(0xff99eeff);
+      canvas.drawCircle(Offset(dx, dy), r,
+        Paint()..color = col.withValues(alpha: (base * tw * alpha).clamp(0.0, 1.0)));
+    }
+  }
+
+  void _drawCollapse(Canvas canvas, Size size, Offset origin, double t) {
+    final rrect = RRect.fromRectAndRadius(
+      Offset.zero & size, const Radius.circular(10));
+
+    // Flash — white burst peaking as the singularity ignites (~t=0.4).
+    final flash = (1 - (t - 0.4).abs() / 0.14).clamp(0.0, 1.0) * 0.85;
+    if (flash > 0) {
+      canvas.drawRRect(rrect,
+        Paint()..color = Colors.white.withValues(alpha: flash));
+    }
+
+    // Shockwave — two purple rings racing outward from the singularity.
+    final sw = ((t - 0.4) / 0.6).clamp(0.0, 1.0);
+    if (sw > 0) {
+      for (final d in [0.0, 0.18]) {
+        final p = (Curves.easeOut.transform((sw - d).clamp(0.0, 1.0)));
+        if (p <= 0) continue;
+        canvas.drawCircle(origin, size.width * (0.1 + 1.05 * p),
+          Paint()
+            ..color = const Color(0xffbb55ff).withValues(alpha: (1 - p) * 0.9)
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 2 + 12 * (1 - p)
+            ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3));
+      }
+    }
+
+    // The new star — what the collapsed region becomes, lingering at the core.
+    final starA = ((t - 0.55) / 0.15).clamp(0.0, 1.0)
+                * (1 - ((t - 0.9) / 0.1).clamp(0.0, 1.0));
+    if (starA > 0) {
+      final pv = sin(pulse * 2 * pi) * 0.5 + 0.5;
+      canvas.drawCircle(origin, 26 + pv * 6,
+        Paint()..color = const Color(0xffbb55ff).withValues(alpha: starA * 0.5)
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 12));
+      canvas.drawCircle(origin, 4 + pv * 1.5,
+        Paint()..color = Colors.white.withValues(alpha: starA));
+    }
+
+    // Title.
+    final textA = ((t - 0.5) / 0.15).clamp(0.0, 1.0)
+                * (1 - ((t - 0.9) / 0.1).clamp(0.0, 1.0));
+    if (textA > 0) {
+      final c  = size.center(Offset.zero);
       final tp = TextPainter(textDirection: TextDirection.ltr)
         ..text = TextSpan(text: 'REGION\nCOLLAPSED', style: TextStyle(
-          color: Colors.white.withValues(alpha: (1 - solveT).clamp(0.0, 1.0)),
+          color: Colors.white.withValues(alpha: textA),
           fontSize: 22, fontFamily: 'monospace', fontWeight: FontWeight.bold,
           letterSpacing: 3, height: 1.3,
           shadows: const [Shadow(color: Color(0xffbb55ff), blurRadius: 18)]))
