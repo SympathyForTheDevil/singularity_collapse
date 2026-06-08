@@ -63,7 +63,11 @@ class _PuzzleScreenState extends State<PuzzleScreen>
     _nudge = AnimationController(
       vsync: this, duration: const Duration(milliseconds: 600));
     _warp = AnimationController(
-      vsync: this, duration: const Duration(milliseconds: 520));
+      vsync: this, duration: const Duration(milliseconds: 520))
+      // Flash up on teleport, then fade back to the idle portal look.
+      ..addStatusListener((s) {
+        if (s == AnimationStatus.completed) _warp.reverse();
+      });
     _solve = AnimationController(
       vsync: this, duration: const Duration(milliseconds: 2000))
       ..addStatusListener((s) async {
@@ -149,6 +153,7 @@ class _PuzzleScreenState extends State<PuzzleScreen>
       ..clear()
       ..add(grid.startCell);
     _clearHint();
+    _warp.reset();   // portals back to their idle look
     HapticFeedback.mediumImpact();
     setState(() {});
   }
