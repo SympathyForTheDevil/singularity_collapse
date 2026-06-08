@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'puzzle_screen.dart';
+import 'home_screen.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -19,7 +19,7 @@ class CollapseApp extends StatelessWidget {
       theme: ThemeData.dark(),
       home: const DefaultTextStyle(
         style: TextStyle(decoration: TextDecoration.none),
-        child: PuzzleScreen(),
+        child: HomeScreen(),
       ),
     );
   }

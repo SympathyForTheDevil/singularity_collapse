@@ -2,13 +2,17 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'cosmic.dart';
+import 'daily_service.dart';
 import 'puzzle_model.dart';
+
+enum PuzzleMode { daily, endless }
 
 /// Singularity: Collapse — the standalone puzzle. Drag one worldline that
 /// consumes cosmic objects in ascending order and fills every cell; reaching
 /// the Black Hole (the final cell) collapses the region into a larger one.
 class PuzzleScreen extends StatefulWidget {
-  const PuzzleScreen({super.key});
+  final PuzzleMode mode;
+  const PuzzleScreen({super.key, this.mode = PuzzleMode.endless});
   @override
   State<PuzzleScreen> createState() => _PuzzleScreenState();
 }
@@ -17,16 +21,20 @@ class _PuzzleScreenState extends State<PuzzleScreen>
     with TickerProviderStateMixin {
   late PuzzleGrid grid;
   final List<int> path = [];
-  int  level   = 1;
+  int  level      = 1;
   int  solvedCount = 0;
-  bool solved  = false;
+  bool solved     = false;
+  bool _showShare = false;
+  int  _streak    = 0;
 
   late final AnimationController _pulse;
   late final AnimationController _solve;
 
   double _boardSize = 320;
 
-  static const Color _accent = Color(0xffffc24d); // worldline (gold)
+  static const Color _accent = Color(0xffffc24d);
+
+  bool get _isDaily => widget.mode == PuzzleMode.daily;
 
   @override
   void initState() {
@@ -35,9 +43,14 @@ class _PuzzleScreenState extends State<PuzzleScreen>
       vsync: this, duration: const Duration(milliseconds: 1400))..repeat();
     _solve = AnimationController(
       vsync: this, duration: const Duration(milliseconds: 1200))
-      ..addStatusListener((s) {
+      ..addStatusListener((s) async {
         if (s == AnimationStatus.completed && mounted) {
-          _newPuzzle(advance: true);
+          if (_isDaily) {
+            final streak = await DailyService.markSolvedAndGetStreak();
+            if (mounted) setState(() { _streak = streak; _showShare = true; });
+          } else {
+            _newPuzzle(advance: true);
+          }
           _solve.reset();
         }
       });
@@ -52,12 +65,15 @@ class _PuzzleScreenState extends State<PuzzleScreen>
   }
 
   void _newPuzzle({bool advance = false}) {
-    if (advance) { level++; solvedCount++; }
-    grid = PuzzleGrid.generate(level);
+    if (!_isDaily && advance) { level++; solvedCount++; }
+    final rng = _isDaily ? Random(DailyService.todaySeed()) : null;
+    final lvl = _isDaily ? DailyService.dailyLevel() : level;
+    grid = PuzzleGrid.generate(lvl, rng: rng);
     path
       ..clear()
       ..add(grid.startCell);
-    solved = false;
+    solved     = false;
+    _showShare = false;
     setState(() {});
   }
 
@@ -78,9 +94,7 @@ class _PuzzleScreenState extends State<PuzzleScreen>
     if (path.contains(target))        return false;
     final m = grid.milestones[target];
     if (m != null) {
-      if (m != _milestonesVisited() + 1) return false; // must consume in order
-      // The Black Hole is the finish: only enterable as the very last cell, so
-      // reaching it requires the whole region to be consumed first.
+      if (m != _milestonesVisited() + 1) return false;
       if (m == grid.milestoneCount && path.length != grid.cellCount - 1) {
         return false;
       }
@@ -103,7 +117,6 @@ class _PuzzleScreenState extends State<PuzzleScreen>
     final cell = _cellAt(local);
     if (cell == null || cell == path.last) return;
 
-    // Drag back onto the previous cell to undo the last step.
     if (path.length >= 2 && cell == path[path.length - 2]) {
       path.removeLast();
       HapticFeedback.selectionClick();
@@ -129,98 +142,230 @@ class _PuzzleScreenState extends State<PuzzleScreen>
     _solve.forward(from: 0);
   }
 
+  String _buildShareText() {
+    final today   = DailyService.todayStr();
+    final pathSet = path.toSet();
+    final buf     = StringBuffer()
+      ..writeln('Singularity: Collapse')
+      ..writeln('Daily Region $today ✅');
+    if (_streak > 0) buf.writeln('Streak 🔥 $_streak');
+    buf.writeln();
+    for (var r = 0; r < grid.size; r++) {
+      for (var c = 0; c < grid.size; c++) {
+        final cell = r * grid.size + c;
+        buf.write(!pathSet.contains(cell)
+          ? '⬛'
+          : cell == path.first
+            ? '🔵'
+            : cell == path.last
+              ? '🟣'
+              : '🟡');
+      }
+      if (r < grid.size - 1) buf.writeln();
+    }
+    return buf.toString();
+  }
+
+  void _copyShare() {
+    Clipboard.setData(ClipboardData(text: _buildShareText()));
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+      content: Text('Copied to clipboard!',
+        style: TextStyle(fontFamily: 'monospace', letterSpacing: 1)),
+      duration: Duration(seconds: 2),
+      backgroundColor: Color(0xff0a1018),
+    ));
+  }
+
   @override
   Widget build(BuildContext context) {
-    final filled = path.length;
-    final total  = grid.cellCount;
+    final filled   = path.length;
+    final total    = grid.cellCount;
     final nextTier = tierFor(
-        (_milestonesVisited() + 1).clamp(1, grid.milestoneCount),
-        grid.milestoneCount);
+      (_milestonesVisited() + 1).clamp(1, grid.milestoneCount),
+      grid.milestoneCount);
+    final now      = DateTime.now();
+    final dateStr  = '${now.month.toString().padLeft(2,'0')}-${now.day.toString().padLeft(2,'0')}';
+
     return Scaffold(
       backgroundColor: const Color(0xff04050a),
-      body: SafeArea(
-        child: Column(
-          children: [
-            // ── Top bar ──────────────────────────────────────────────────────
-            Padding(
-              padding: const EdgeInsets.fromLTRB(14, 10, 14, 2),
-              child: Row(
-                children: [
-                  _iconBtn(Icons.refresh, _reset),
-                  const Spacer(),
-                  Column(children: [
-                    Text('COLLAPSE  ·  STAGE $level',
-                      style: const TextStyle(color: _accent, fontSize: 15,
-                        fontFamily: 'monospace', letterSpacing: 3,
-                        fontWeight: FontWeight.bold,
-                        shadows: [Shadow(color: Color(0x66ffc24d), blurRadius: 12)])),
-                    const SizedBox(height: 2),
-                    Text('$filled / $total  CONSUMED   ·   SOLVED  $solvedCount',
-                      style: const TextStyle(color: Color(0xff44607a), fontSize: 9,
-                        fontFamily: 'monospace', letterSpacing: 2)),
-                  ]),
-                  const Spacer(),
-                  _iconBtn(Icons.add, () => _newPuzzle()),
-                ],
-              ),
-            ),
-
-            // Next-target hint
-            Padding(
-              padding: const EdgeInsets.only(top: 2, bottom: 2),
-              child: Text(
-                solved ? 'REGION COLLAPSED' : 'NEXT  ·  ${nextTier.name.toUpperCase()}',
-                style: TextStyle(
-                  color: solved ? Colors.white : nextTier.color,
-                  fontSize: 10, fontFamily: 'monospace', letterSpacing: 3,
-                  shadows: [Shadow(color: nextTier.color.withValues(alpha: 0.5), blurRadius: 8)]),
-              ),
-            ),
-
-            // ── Board ────────────────────────────────────────────────────────
-            Expanded(
-              child: Center(
-                child: LayoutBuilder(
-                  builder: (ctx, cons) {
-                    final side = (min(cons.maxWidth, cons.maxHeight) - 16)
-                        .clamp(200.0, 620.0);
-                    _boardSize = side;
-                    return GestureDetector(
-                      onPanStart:  (d) => _onPan(d.localPosition),
-                      onPanUpdate: (d) => _onPan(d.localPosition),
-                      child: AnimatedBuilder(
-                        animation: Listenable.merge([_pulse, _solve]),
-                        builder: (_, __) => CustomPaint(
-                          size: Size(side, side),
-                          painter: _PuzzlePainter(
-                            grid: grid,
-                            path: path,
-                            pulse: _pulse.value,
-                            solveT: _solve.value,
-                            accent: _accent,
-                          ),
-                        ),
-                      ),
-                    );
-                  },
+      body: Stack(
+        children: [
+          SafeArea(
+            child: Column(
+              children: [
+                // ── Top bar ────────────────────────────────────────────────
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 10, 14, 2),
+                  child: Row(
+                    children: [
+                      _isDaily
+                        ? _iconBtn(Icons.arrow_back_ios_new,
+                            () => Navigator.pop(context))
+                        : _iconBtn(Icons.refresh, _reset),
+                      const Spacer(),
+                      Column(children: [
+                        Text(
+                          _isDaily
+                            ? 'DAILY REGION  ·  $dateStr'
+                            : 'COLLAPSE  ·  STAGE $level',
+                          style: const TextStyle(
+                            color: _accent, fontSize: 15,
+                            fontFamily: 'monospace', letterSpacing: 3,
+                            fontWeight: FontWeight.bold,
+                            shadows: [Shadow(color: Color(0x66ffc24d), blurRadius: 12)])),
+                        const SizedBox(height: 2),
+                        Text(
+                          _isDaily
+                            ? '$filled / $total  CONSUMED'
+                            : '$filled / $total  CONSUMED   ·   SOLVED  $solvedCount',
+                          style: const TextStyle(
+                            color: Color(0xff44607a), fontSize: 9,
+                            fontFamily: 'monospace', letterSpacing: 2)),
+                      ]),
+                      const Spacer(),
+                      _isDaily
+                        ? const SizedBox(width: 40)
+                        : _iconBtn(Icons.add, () => _newPuzzle()),
+                    ],
+                  ),
                 ),
+
+                // Next-target hint
+                Padding(
+                  padding: const EdgeInsets.only(top: 2, bottom: 2),
+                  child: Text(
+                    solved ? 'REGION COLLAPSED' : 'NEXT  ·  ${nextTier.name.toUpperCase()}',
+                    style: TextStyle(
+                      color: solved ? Colors.white : nextTier.color,
+                      fontSize: 10, fontFamily: 'monospace', letterSpacing: 3,
+                      shadows: [Shadow(
+                        color: nextTier.color.withValues(alpha: 0.5), blurRadius: 8)]),
+                  ),
+                ),
+
+                // ── Board ──────────────────────────────────────────────────
+                Expanded(
+                  child: Center(
+                    child: LayoutBuilder(
+                      builder: (ctx, cons) {
+                        final side = (min(cons.maxWidth, cons.maxHeight) - 16)
+                            .clamp(200.0, 620.0);
+                        _boardSize = side;
+                        return GestureDetector(
+                          onPanStart:  (d) => _onPan(d.localPosition),
+                          onPanUpdate: (d) => _onPan(d.localPosition),
+                          child: AnimatedBuilder(
+                            animation: Listenable.merge([_pulse, _solve]),
+                            builder: (_, _) => CustomPaint(
+                              size: Size(side, side),
+                              painter: _PuzzlePainter(
+                                grid: grid,
+                                path: path,
+                                pulse: _pulse.value,
+                                solveT: _solve.value,
+                                accent: _accent,
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ),
+
+                // ── Footer ─────────────────────────────────────────────────
+                const Padding(
+                  padding: EdgeInsets.fromLTRB(24, 6, 24, 10),
+                  child: Text(
+                    'Drag one path · consume objects in order · fill every cell · finish on the black hole',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: Color(0xff3a526a), fontSize: 9.5,
+                      fontFamily: 'monospace', letterSpacing: 1, height: 1.5)),
+                ),
+              ],
+            ),
+          ),
+
+          // ── Share overlay (daily mode, after solve) ─────────────────────
+          if (_showShare) _buildShareOverlay(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildShareOverlay() {
+    final shareText = _buildShareText();
+    return Container(
+      color: const Color(0xee04050a),
+      child: SafeArea(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Text('REGION COLLAPSED',
+              style: TextStyle(
+                color: Colors.white, fontSize: 22, fontFamily: 'monospace',
+                fontWeight: FontWeight.bold, letterSpacing: 4,
+                shadows: [Shadow(color: Color(0xffbb55ff), blurRadius: 20)])),
+
+            if (_streak > 0) ...[
+              const SizedBox(height: 8),
+              Text('$_streak DAY STREAK',
+                style: const TextStyle(
+                  color: Color(0xffbb55ff), fontSize: 12,
+                  fontFamily: 'monospace', letterSpacing: 3,
+                  shadows: [Shadow(color: Color(0x66bb55ff), blurRadius: 10)])),
+            ],
+
+            const SizedBox(height: 28),
+
+            // Share card preview
+            Container(
+              margin: const EdgeInsets.symmetric(horizontal: 32),
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: const Color(0xff0a1018),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: const Color(0xff223344)),
               ),
+              child: Text(shareText,
+                style: const TextStyle(
+                  fontFamily: 'monospace', fontSize: 11,
+                  color: Color(0xffccddee), height: 1.6, letterSpacing: 1)),
             ),
 
-            // ── Footer ───────────────────────────────────────────────────────
-            const Padding(
-              padding: EdgeInsets.fromLTRB(24, 6, 24, 10),
-              child: Text(
-                'Drag one path · consume objects in order · fill every cell · finish on the black hole',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: Color(0xff3a526a), fontSize: 9.5,
-                  fontFamily: 'monospace', letterSpacing: 1, height: 1.5)),
-            ),
+            const SizedBox(height: 28),
+
+            // Copy button
+            _overlayBtn('COPY SHARE CARD', const Color(0xffffc24d), _copyShare),
+            const SizedBox(height: 12),
+            // Home button
+            _overlayBtn('HOME', const Color(0xff7799aa),
+              () => Navigator.pop(context)),
           ],
         ),
       ),
     );
   }
+
+  Widget _overlayBtn(String label, Color color, VoidCallback onTap) =>
+    GestureDetector(
+      onTap: onTap,
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 56),
+        padding: const EdgeInsets.symmetric(vertical: 14),
+        decoration: BoxDecoration(
+          color: const Color(0xff0a1018),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: color.withValues(alpha: 0.55), width: 1.5),
+        ),
+        child: Center(child: Text(label,
+          style: TextStyle(
+            color: color, fontSize: 12, fontFamily: 'monospace',
+            fontWeight: FontWeight.bold, letterSpacing: 2,
+            shadows: [Shadow(color: color.withValues(alpha: 0.35), blurRadius: 8)]))),
+      ),
+    );
 
   Widget _iconBtn(IconData icon, VoidCallback onTap) => GestureDetector(
     onTap: onTap,
@@ -239,8 +384,8 @@ class _PuzzleScreenState extends State<PuzzleScreen>
 class _PuzzlePainter extends CustomPainter {
   final PuzzleGrid grid;
   final List<int>  path;
-  final double     pulse;   // 0..1 repeating
-  final double     solveT;  // 0..1 during collapse celebration
+  final double     pulse;
+  final double     solveT;
   final Color      accent;
 
   _PuzzlePainter({
@@ -304,7 +449,7 @@ class _PuzzlePainter extends CustomPainter {
       }
     }
 
-    // ── Worldline ─────────────────────────────────────────────────────────────
+    // ── Worldline ──────────────────────────────────────────────────────────
     if (path.length >= 2) {
       final line = Path()..moveTo(center(path.first).dx, center(path.first).dy);
       for (var i = 1; i < path.length; i++) {
@@ -325,15 +470,14 @@ class _PuzzlePainter extends CustomPainter {
         ..strokeCap = StrokeCap.round);
     }
 
-    // ── Cosmic milestones ─────────────────────────────────────────────────────
+    // ── Cosmic milestones ──────────────────────────────────────────────────
     final visited = path.where((c) => grid.milestones.containsKey(c)).length;
-    final count = grid.milestoneCount;
+    final count   = grid.milestoneCount;
     grid.milestones.forEach((cellIdx, mnum) {
       final pos  = center(cellIdx);
       final tier = tierFor(mnum, count);
       final done = mnum <= visited;
       final next = mnum == visited + 1;
-      // Ascending size: small objects → big black hole.
       final frac = count > 1 ? (mnum - 1) / (count - 1) : 0.0;
       final rad  = cell * (0.20 + frac * 0.14);
 
@@ -343,7 +487,6 @@ class _PuzzlePainter extends CustomPainter {
       }
 
       if (tier.isBlackHole) {
-        // Accretion disk
         canvas.save();
         canvas.translate(pos.dx, pos.dy);
         canvas.scale(1.0, 0.34);
@@ -354,14 +497,12 @@ class _PuzzlePainter extends CustomPainter {
           Paint()..color = const Color(0xffffaa33).withValues(alpha: 0.40)
             ..style = PaintingStyle.stroke ..strokeWidth = 3);
         canvas.restore();
-        // Void + ring + glow
         canvas.drawCircle(pos, rad * 1.5, Paint()..color = tier.color.withValues(alpha: 0.18));
         canvas.drawCircle(pos, rad, Paint()..color = const Color(0xff000000));
         canvas.drawCircle(pos, rad, Paint()
           ..color = tier.color.withValues(alpha: 0.95)
           ..style = PaintingStyle.stroke ..strokeWidth = 2.5);
       } else {
-        // Glowing orb
         canvas.drawCircle(pos, rad * 1.7,
           Paint()..color = tier.color.withValues(alpha: done ? 0.28 : 0.16));
         canvas.drawCircle(pos, rad, Paint()
@@ -369,13 +510,12 @@ class _PuzzlePainter extends CustomPainter {
         canvas.drawCircle(pos, rad, Paint()
           ..color = tier.color
           ..style = PaintingStyle.stroke ..strokeWidth = 2);
-        // Highlight
         canvas.drawCircle(pos - Offset(rad * 0.3, rad * 0.3), rad * 0.34,
           Paint()..color = Colors.white.withValues(alpha: done ? 0.5 : 0.25));
       }
     });
 
-    // ── Head orb (the singularity), grows with progress ───────────────────────
+    // ── Head orb ──────────────────────────────────────────────────────────
     if (path.isNotEmpty) {
       final head = center(path.last);
       final prog = path.length / grid.cellCount;
@@ -391,9 +531,9 @@ class _PuzzlePainter extends CustomPainter {
       ..color = accent.withValues(alpha: 0.45)
       ..style = PaintingStyle.stroke ..strokeWidth = 1.5);
 
-    // ── Collapse celebration ──────────────────────────────────────────────────
+    // ── Collapse celebration ───────────────────────────────────────────────
     if (solveT > 0) {
-      final c = size.center(Offset.zero);
+      final c     = size.center(Offset.zero);
       final ringR = size.width * 0.9 * Curves.easeOut.transform(solveT);
       canvas.drawCircle(c, ringR, Paint()
         ..color = const Color(0xffbb55ff).withValues(alpha: (1 - solveT) * 0.9)
