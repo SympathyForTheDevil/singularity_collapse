@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -21,11 +22,16 @@ class _PuzzleScreenState extends State<PuzzleScreen>
     with TickerProviderStateMixin {
   late PuzzleGrid grid;
   final List<int> path = [];
-  int  level      = 1;
+  int  level       = 1;
   int  solvedCount = 0;
-  bool solved     = false;
-  bool _showShare = false;
-  int  _streak    = 0;
+  bool solved      = false;
+  bool _showShare  = false;
+  int  _streak     = 0;
+
+  // Timer
+  int    _seconds = 0;
+  bool   _zenMode = false;
+  Timer? _timer;
 
   late final AnimationController _pulse;
   late final AnimationController _solve;
@@ -59,10 +65,29 @@ class _PuzzleScreenState extends State<PuzzleScreen>
 
   @override
   void dispose() {
+    _timer?.cancel();
     _pulse.dispose();
     _solve.dispose();
     super.dispose();
   }
+
+  void _startTimer() {
+    _timer?.cancel();
+    _seconds = 0;
+    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted && !solved) setState(() => _seconds++);
+    });
+  }
+
+  void _stopTimer() {
+    _timer?.cancel();
+    _timer = null;
+  }
+
+  String _formatTime(int s) =>
+      '${s ~/ 60}:${(s % 60).toString().padLeft(2, '0')}';
+
+  void _toggleZen() => setState(() => _zenMode = !_zenMode);
 
   void _newPuzzle({bool advance = false}) {
     if (!_isDaily && advance) { level++; solvedCount++; }
@@ -74,6 +99,7 @@ class _PuzzleScreenState extends State<PuzzleScreen>
       ..add(grid.startCell);
     solved     = false;
     _showShare = false;
+    _startTimer();
     setState(() {});
   }
 
@@ -137,6 +163,7 @@ class _PuzzleScreenState extends State<PuzzleScreen>
   }
 
   void _onSolved() {
+    _stopTimer();
     solved = true;
     HapticFeedback.heavyImpact();
     _solve.forward(from: 0);
@@ -148,6 +175,7 @@ class _PuzzleScreenState extends State<PuzzleScreen>
     final buf     = StringBuffer()
       ..writeln('Singularity: Collapse')
       ..writeln('Daily Region $today ✅');
+    if (!_zenMode) buf.writeln('Time: ${_formatTime(_seconds)}');
     if (_streak > 0) buf.writeln('Streak 🔥 $_streak');
     buf.writeln();
     for (var r = 0; r < grid.size; r++) {
@@ -198,34 +226,58 @@ class _PuzzleScreenState extends State<PuzzleScreen>
                   padding: const EdgeInsets.fromLTRB(14, 10, 14, 2),
                   child: Row(
                     children: [
+                      // Left: back to menu (daily) or reset (endless)
                       _isDaily
                         ? _iconBtn(Icons.arrow_back_ios_new,
                             () => Navigator.pop(context))
                         : _iconBtn(Icons.refresh, _reset),
+
                       const Spacer(),
-                      Column(children: [
-                        Text(
-                          _isDaily
-                            ? 'DAILY REGION  ·  $dateStr'
-                            : 'COLLAPSE  ·  STAGE $level',
-                          style: const TextStyle(
-                            color: _accent, fontSize: 15,
-                            fontFamily: 'monospace', letterSpacing: 3,
-                            fontWeight: FontWeight.bold,
-                            shadows: [Shadow(color: Color(0x66ffc24d), blurRadius: 12)])),
-                        const SizedBox(height: 2),
-                        Text(
-                          _isDaily
-                            ? '$filled / $total  CONSUMED'
-                            : '$filled / $total  CONSUMED   ·   SOLVED  $solvedCount',
-                          style: const TextStyle(
-                            color: Color(0xff44607a), fontSize: 9,
-                            fontFamily: 'monospace', letterSpacing: 2)),
-                      ]),
+
+                      // Centre: title + stats + timer
+                      Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            _isDaily
+                              ? 'DAILY REGION  ·  $dateStr'
+                              : 'COLLAPSE  ·  STAGE $level',
+                            style: const TextStyle(
+                              color: _accent, fontSize: 15,
+                              fontFamily: 'monospace', letterSpacing: 3,
+                              fontWeight: FontWeight.bold,
+                              shadows: [Shadow(color: Color(0x66ffc24d), blurRadius: 12)])),
+                          const SizedBox(height: 2),
+                          Text(
+                            _isDaily
+                              ? '$filled / $total  CONSUMED'
+                              : '$filled / $total  CONSUMED   ·   SOLVED  $solvedCount',
+                            style: const TextStyle(
+                              color: Color(0xff44607a), fontSize: 9,
+                              fontFamily: 'monospace', letterSpacing: 2)),
+                          const SizedBox(height: 1),
+                          // Timer — tap to toggle zen mode
+                          GestureDetector(
+                            onTap: _toggleZen,
+                            child: Text(
+                              _zenMode ? 'ZEN' : _formatTime(_seconds),
+                              style: TextStyle(
+                                color: _zenMode
+                                  ? const Color(0xff2a3d4e)
+                                  : const Color(0xff4a7090),
+                                fontSize: 9, fontFamily: 'monospace',
+                                letterSpacing: 2)),
+                          ),
+                        ],
+                      ),
+
                       const Spacer(),
+
+                      // Right: home (endless) or zen is already in centre
                       _isDaily
                         ? const SizedBox(width: 40)
-                        : _iconBtn(Icons.add, () => _newPuzzle()),
+                        : _iconBtn(Icons.home_outlined,
+                            () => Navigator.pop(context)),
                     ],
                   ),
                 ),
@@ -308,8 +360,16 @@ class _PuzzleScreenState extends State<PuzzleScreen>
                 fontWeight: FontWeight.bold, letterSpacing: 4,
                 shadows: [Shadow(color: Color(0xffbb55ff), blurRadius: 20)])),
 
+            if (!_zenMode && _seconds > 0) ...[
+              const SizedBox(height: 6),
+              Text(_formatTime(_seconds),
+                style: const TextStyle(
+                  color: Color(0xff6699bb), fontSize: 13,
+                  fontFamily: 'monospace', letterSpacing: 3)),
+            ],
+
             if (_streak > 0) ...[
-              const SizedBox(height: 8),
+              const SizedBox(height: 6),
               Text('$_streak DAY STREAK',
                 style: const TextStyle(
                   color: Color(0xffbb55ff), fontSize: 12,
@@ -336,10 +396,8 @@ class _PuzzleScreenState extends State<PuzzleScreen>
 
             const SizedBox(height: 28),
 
-            // Copy button
             _overlayBtn('COPY SHARE CARD', const Color(0xffffc24d), _copyShare),
             const SizedBox(height: 12),
-            // Home button
             _overlayBtn('HOME', const Color(0xff7799aa),
               () => Navigator.pop(context)),
           ],

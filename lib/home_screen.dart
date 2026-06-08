@@ -60,72 +60,83 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       body: SafeArea(
         child: Column(
           children: [
-            const Spacer(flex: 2),
+            // ── Centred content ─────────────────────────────────────────────
+            Expanded(
+              child: Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Title
+                    const Text('SINGULARITY',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: _gold, fontSize: 30, fontFamily: 'monospace',
+                        fontWeight: FontWeight.bold, letterSpacing: 6,
+                        shadows: [Shadow(color: Color(0x88ffc24d), blurRadius: 24)])),
+                    const SizedBox(height: 4),
+                    const Text('C  O  L  L  A  P  S  E',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Color(0xff99bbcc), fontSize: 12,
+                        fontFamily: 'monospace', letterSpacing: 4)),
 
-            // Title
-            const Text('SINGULARITY',
-              style: TextStyle(
-                color: _gold, fontSize: 30, fontFamily: 'monospace',
-                fontWeight: FontWeight.bold, letterSpacing: 6,
-                shadows: [Shadow(color: Color(0x88ffc24d), blurRadius: 24)])),
-            const SizedBox(height: 4),
-            const Text('C  O  L  L  A  P  S  E',
-              style: TextStyle(
-                color: Color(0xff99bbcc), fontSize: 12,
-                fontFamily: 'monospace', letterSpacing: 4)),
+                    const SizedBox(height: 44),
 
-            const Spacer(flex: 2),
+                    // Black hole orb — pulsing purple glow
+                    AnimatedBuilder(
+                      animation: _pulse,
+                      builder: (_, _) {
+                        final v = sin(_pulse.value * 2 * pi) * 0.5 + 0.5;
+                        return Container(
+                          width: 80, height: 80,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: Colors.black,
+                            border: Border.all(color: _purple, width: 2),
+                            boxShadow: [
+                              BoxShadow(
+                                color: _purple.withValues(alpha: 0.22 + v * 0.22),
+                                blurRadius: 22 + v * 14, spreadRadius: 2 + v * 5),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
 
-            // Black hole orb — pulsing purple glow
-            AnimatedBuilder(
-              animation: _pulse,
-              builder: (_, _) {
-                final v = sin(_pulse.value * 2 * pi) * 0.5 + 0.5;
-                return Container(
-                  width: 80, height: 80,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: Colors.black,
-                    border: Border.all(color: _purple, width: 2),
-                    boxShadow: [
-                      BoxShadow(
-                        color: _purple.withValues(alpha: 0.22 + v * 0.22),
-                        blurRadius: 22 + v * 14, spreadRadius: 2 + v * 5),
-                    ],
-                  ),
-                );
-              },
-            ),
+                    const SizedBox(height: 44),
 
-            const Spacer(flex: 2),
+                    // Streak badge — always occupies space to prevent layout shift
+                    AnimatedOpacity(
+                      opacity: (_loaded && _streak > 0) ? 1.0 : 0.0,
+                      duration: const Duration(milliseconds: 400),
+                      child: Text('$_streak DAY STREAK',
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          color: _purple, fontSize: 11, fontFamily: 'monospace',
+                          letterSpacing: 4,
+                          shadows: [Shadow(color: Color(0x66bb55ff), blurRadius: 10)])),
+                    ),
+                    const SizedBox(height: 16),
 
-            // Streak badge
-            if (_loaded && _streak > 0)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 14),
-                child: Text('$_streak DAY STREAK',
-                  style: const TextStyle(
-                    color: _purple, fontSize: 11, fontFamily: 'monospace',
-                    letterSpacing: 4,
-                    shadows: [Shadow(color: Color(0x66bb55ff), blurRadius: 10)])),
+                    // Daily button
+                    _menuBtn(
+                      _solvedToday ? 'ALREADY COLLAPSED' : 'TODAY\'S REGION',
+                      subtitle: today,
+                      color: _solvedToday ? const Color(0xff334455) : _gold,
+                      onTap: _solvedToday ? null : _goDaily,
+                    ),
+                    const SizedBox(height: 14),
+
+                    // Endless button
+                    _menuBtn('ENDLESS MODE',
+                      color: const Color(0xff44aaff),
+                      onTap: _goEndless),
+                  ],
+                ),
               ),
-
-            // Daily button
-            _menuBtn(
-              _solvedToday ? 'ALREADY COLLAPSED' : 'TODAY\'S REGION',
-              subtitle: today,
-              color: _solvedToday ? const Color(0xff334455) : _gold,
-              onTap: _solvedToday ? null : _goDaily,
             ),
-            const SizedBox(height: 14),
 
-            // Endless button
-            _menuBtn('ENDLESS MODE',
-              color: const Color(0xff44aaff),
-              onTap: _goEndless),
-
-            const Spacer(flex: 3),
-
+            // ── Footer ──────────────────────────────────────────────────────
             const Text(
               'drag one path · consume objects in order · fill every cell',
               textAlign: TextAlign.center,
@@ -157,8 +168,10 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
             color: color.withValues(alpha: active ? 0.65 : 0.20), width: 1.5),
         ),
         child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
             Text(label,
+              textAlign: TextAlign.center,
               style: TextStyle(
                 color: active ? color : color.withValues(alpha: 0.35),
                 fontSize: 13, fontFamily: 'monospace',
@@ -169,6 +182,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
             if (subtitle != null) ...[
               const SizedBox(height: 3),
               Text(subtitle,
+                textAlign: TextAlign.center,
                 style: TextStyle(
                   color: (active ? color : color.withValues(alpha: 0.35))
                     .withValues(alpha: 0.55),
