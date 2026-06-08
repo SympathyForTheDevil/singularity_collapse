@@ -94,10 +94,12 @@ A cell is steppable iff:
 
 ## Input & feedback
 
-- **Drag** to trace. A centre deadzone (`_gutter = 0.20`, the outer 20% of each
-  cell is dead) means the finger must commit to a cell's interior before a step
-  registers — kills wobble-induced miss-steps and accidental undos.
-- **Drag back** onto the previous cell undoes the last step.
+- **Drag** to trace. Forward stepping is edge-to-edge responsive (no deadzone) —
+  keep it that way; a deadzone on forward motion makes swiping feel sticky.
+- **Drag back** onto the previous cell undoes the last step — but only when the
+  finger reaches the cell's interior (`_deepInside`, `_undoMargin = 0.34`). This
+  gates *only the undo*, so a fast swipe grazing the previous cell's edge won't
+  trigger a spurious backtrack while drawing stays fluid.
 - **Undo button** (top-right) steps back one; **Reset** clears to the start cell.
 - **Tap any visited cell** to rewind the worldline to it (`_truncateTo`) — the
   fast fix for an early mistake without dragging all the way back.

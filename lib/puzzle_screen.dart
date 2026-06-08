@@ -197,26 +197,28 @@ class _PuzzleScreenState extends State<PuzzleScreen>
     return true;
   }
 
-  /// Map a local point to a cell. A centre deadzone (the outer [_gutter] of each
-  /// cell is dead) means the finger must commit to a cell's interior before it
-  /// registers — this stops boundary-grazing from spuriously stepping or undoing.
-  static const double _gutter = 0.20;
-
-  int? _cellAt(Offset p, {bool deadzone = true}) {
+  int? _cellAt(Offset p) {
     final cs = _boardSize / grid.size;
     if (p.dx < 0 || p.dy < 0 || p.dx >= _boardSize || p.dy >= _boardSize) {
       return null;
     }
     final c = (p.dx / cs).floor().clamp(0, grid.size - 1);
     final r = (p.dy / cs).floor().clamp(0, grid.size - 1);
-    if (deadzone) {
-      final fx = p.dx / cs - c, fy = p.dy / cs - r;   // 0..1 within the cell
-      if (fx < _gutter || fx > 1 - _gutter ||
-          fy < _gutter || fy > 1 - _gutter) {
-        return null;                                   // in the gutter — ignore
-      }
-    }
     return r * grid.size + c;
+  }
+
+  /// How far into a cell the finger must reach (each side) before an *undo* is
+  /// allowed. Only the backtrack is gated — forward stepping stays edge-to-edge
+  /// responsive — so a fast swipe that grazes the previous cell's edge no longer
+  /// triggers a spurious undo, but the drawing motion itself is never sticky.
+  static const double _undoMargin = 0.34;
+
+  bool _deepInside(Offset p, int cell) {
+    final cs = _boardSize / grid.size;
+    final fx = p.dx / cs - grid.colOf(cell);
+    final fy = p.dy / cs - grid.rowOf(cell);
+    return fx > _undoMargin && fx < 1 - _undoMargin &&
+           fy > _undoMargin && fy < 1 - _undoMargin;
   }
 
   void _onPan(Offset local) {
@@ -225,10 +227,14 @@ class _PuzzleScreenState extends State<PuzzleScreen>
     if (cell == null || cell == path.last) return;
 
     if (path.length >= 2 && cell == path[path.length - 2]) {
-      path.removeLast();
-      _clearHint();
-      HapticFeedback.selectionClick();
-      setState(() {});
+      // Deliberate pull-back into the previous cell = undo; a mere edge graze
+      // during forward motion is ignored.
+      if (_deepInside(local, cell)) {
+        path.removeLast();
+        _clearHint();
+        HapticFeedback.selectionClick();
+        setState(() {});
+      }
       return;
     }
 
@@ -246,11 +252,10 @@ class _PuzzleScreenState extends State<PuzzleScreen>
     }
   }
 
-  /// Tap a visited cell to rewind the worldline to it (no deadzone — taps are
-  /// deliberate). Tapping elsewhere does nothing.
+  /// Tap a visited cell to rewind the worldline to it. Tapping elsewhere does nothing.
   void _onTap(Offset local) {
     if (solved) return;
-    final cell = _cellAt(local, deadzone: false);
+    final cell = _cellAt(local);
     if (cell == null) return;
     if (path.contains(cell)) _truncateTo(cell);
   }
