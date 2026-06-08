@@ -27,7 +27,8 @@ class PuzzleGrid {
   final Map<int, int> milestones; // cellIndex -> milestone number (1..k)
   final Set<int> walls;           // blocked edges, encoded via [edgeKey]
   final Map<int, int> wormholes;  // symmetric cell<->twin links (teleport edges)
-  final Map<int, int> gates;      // edgeKey -> milestone number required to pass
+  final Map<int, int> gates;      // edgeKey -> key id that opens it
+  final Map<int, int> keys;       // cell -> key id (the "boson" collectible)
 
   PuzzleGrid({
     required this.size,
@@ -36,13 +37,16 @@ class PuzzleGrid {
     required this.walls,
     this.wormholes = const {},
     this.gates = const {},
+    this.keys = const {},
   });
 
   bool isWormhole(int cell)   => wormholes.containsKey(cell);
   int? wormholeTwin(int cell) => wormholes[cell];
 
-  /// Milestone number required to cross the edge a–b, or null if no gate there.
-  int? gateAt(int a, int b) => gates[edgeKey(a, b, cellCount)];
+  /// Key id required to cross the edge a–b, or null if no gate there.
+  int? gateKeyAt(int a, int b) => gates[edgeKey(a, b, cellCount)];
+  /// Key id of the boson on [cell], or null.
+  int? keyIdAt(int cell)        => keys[cell];
 
   /// Two cells are linked if they're grid-adjacent or a wormhole pair.
   bool linked(int a, int b) => adjacent(a, b) || wormholes[a] == b;
@@ -132,30 +136,35 @@ class PuzzleGrid {
       ms[sol[idx[i]]] = i + 1;
     }
 
-    // ── Mass gate (skill-gated) ──────────────────────────────────────────────
-    // Seal one solution edge behind a milestone requirement. We place it on an
-    // edge the solution crosses only AFTER it has collected `required`
-    // milestones, so following the solution still works — the player must route
-    // to absorb that object before the way opens. Solvable by construction.
-    final gates = <int, int>{};
+    // ── Mass gate + boson key (skill-gated) ──────────────────────────────────
+    // Seal one solution edge behind a *boson* the player must collect first. The
+    // boson is NOT a milestone, so it isn't picked up automatically by the forced
+    // ascending order — it's an off-route fetch. We place the gate in the back
+    // half of the solution and the boson somewhere before it, so following the
+    // solution still works (key collected before the gate is crossed) → solvable
+    // by construction, and the gate is a genuine routing detour.
+    final gates = <int, int>{};   // edgeKey -> key id
+    final keys  = <int, int>{};   // cell    -> key id
     if (wantGate) {
-      // milestones collected by the time the solution reaches each position
-      final visitedBy = List<int>.filled(sol.length, 0);
-      var acc = 0;
-      for (var i = 0; i < sol.length; i++) {
-        if (ms.containsKey(sol[i])) acc++;
-        visitedBy[i] = acc;
+      final msPos = idx.toSet();                 // milestone solution positions
+      final gateCands = <int>[];                 // edge positions in the back half
+      for (var p = (sol.length * 0.45).floor(); p + 1 < sol.length - 1; p++) {
+        if (adj(sol[p], sol[p + 1])) gateCands.add(p);
       }
-      final mc = ms.length;
-      final candidates = <int>[];      // solution edge positions p (sol[p]→sol[p+1])
-      for (var p = 2; p + 1 < sol.length; p++) {
-        if (!adj(sol[p], sol[p + 1])) continue;       // skip the wormhole jump
-        final req = visitedBy[p];                     // milestones in hand at p
-        if (req >= 2 && req < mc) candidates.add(p);  // non-trivial, not the BH
-      }
-      if (candidates.isNotEmpty) {
-        final p = candidates[r.nextInt(candidates.length)];
-        gates[edgeKey(sol[p], sol[p + 1], n)] = visitedBy[p];
+      if (gateCands.isNotEmpty) {
+        final p = gateCands[r.nextInt(gateCands.length)];
+        final keyCands = <int>[];                // positions before the gate
+        for (var q = 1; q < p; q++) {
+          if (msPos.contains(q) || wormPositions.contains(q)) continue;
+          keyCands.add(q);
+        }
+        if (keyCands.isNotEmpty) {
+          keyCands.sort();
+          // Bias the boson earlier → a longer "go fetch it" dependency.
+          final q = keyCands[r.nextInt((keyCands.length / 2).ceil())];
+          gates[edgeKey(sol[p], sol[p + 1], n)] = 0;
+          keys[sol[q]] = 0;
+        }
       }
     }
 
@@ -180,7 +189,7 @@ class PuzzleGrid {
 
     return PuzzleGrid(
       size: size, solution: sol, milestones: ms, walls: walls,
-      wormholes: wormholes, gates: gates);
+      wormholes: wormholes, gates: gates, keys: keys);
   }
 
   /// Randomized Hamiltonian path via Warnsdorff's heuristic with random restarts.

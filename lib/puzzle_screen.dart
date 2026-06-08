@@ -48,6 +48,7 @@ class _PuzzleScreenState extends State<PuzzleScreen>
   late final AnimationController _solve;
   late final AnimationController _nudge;   // black-hole "not yet" warning flash
   late final AnimationController _warp;    // wormhole teleport flash
+  late final AnimationController _unlock;  // mass-gate open ripple
 
   bool _seenWormhole = false;              // gate the one-time intro hints
   bool _seenGate     = false;
@@ -78,6 +79,8 @@ class _PuzzleScreenState extends State<PuzzleScreen>
       ..addStatusListener((s) {
         if (s == AnimationStatus.completed) _warp.reverse();
       });
+    _unlock = AnimationController(
+      vsync: this, duration: const Duration(milliseconds: 600));
     _solve = AnimationController(
       vsync: this, duration: const Duration(milliseconds: 2000))
       ..addStatusListener((s) async {
@@ -115,9 +118,7 @@ class _PuzzleScreenState extends State<PuzzleScreen>
     } else if (grid.gates.isNotEmpty && !_seenGate) {
       _seenGate = true;
       SharedPreferences.getInstance().then((p) => p.setBool('seen_gate', true));
-      final req  = grid.gates.values.first;
-      final tier = tierFor(req, grid.milestoneCount);
-      _showHint('NEW · MASS GATE — ABSORB THE ${tier.name.toUpperCase()} TO OPEN',
+      _showHint('NEW · MASS GATE — GRAB THE BOSON TO OPEN IT',
         duration: const Duration(milliseconds: 4200));
     }
   }
@@ -131,6 +132,7 @@ class _PuzzleScreenState extends State<PuzzleScreen>
     _solve.dispose();
     _nudge.dispose();
     _warp.dispose();
+    _unlock.dispose();
     super.dispose();
   }
 
@@ -163,6 +165,7 @@ class _PuzzleScreenState extends State<PuzzleScreen>
     _clearHint();
     _nudge.reset();
     _warp.reset();
+    _unlock.reset();
     _startTimer();
     _maybeFeatureIntro();
     setState(() {});
@@ -175,6 +178,7 @@ class _PuzzleScreenState extends State<PuzzleScreen>
       ..add(grid.startCell);
     _clearHint();
     _warp.reset();   // portals back to their idle look
+    _unlock.reset();
     HapticFeedback.mediumImpact();
     setState(() {});
   }
@@ -249,8 +253,8 @@ class _PuzzleScreenState extends State<PuzzleScreen>
     if (!viaWorm) {
       if (!grid.adjacent(head, target)) return false;
       if (grid.hasWall(head, target))   return false;
-      final gate = grid.gateAt(head, target);   // sealed until milestone `gate`
-      if (gate != null && _milestonesVisited() < gate) return false;
+      final keyId = grid.gateKeyAt(head, target);   // sealed until its boson is taken
+      if (keyId != null && !_keyCollected(keyId)) return false;
     }
     if (path.contains(target))          return false;
     final m = grid.milestones[target];
@@ -263,12 +267,16 @@ class _PuzzleScreenState extends State<PuzzleScreen>
     return true;
   }
 
+  /// Has the boson with id [keyId] been collected (its cell is on the path)?
+  bool _keyCollected(int keyId) =>
+      grid.keys.entries.any((e) => e.value == keyId && path.contains(e.key));
+
   /// True when [target] is blocked only by a still-locked mass gate.
   bool _isGateBlocked(int target) {
-    final head = path.last;
-    final gate = grid.gateAt(head, target);
-    return gate != null &&
-        _milestonesVisited() < gate &&
+    final head  = path.last;
+    final keyId = grid.gateKeyAt(head, target);
+    return keyId != null &&
+        !_keyCollected(keyId) &&
         !grid.hasWall(head, target) &&
         !path.contains(target);
   }
@@ -277,13 +285,11 @@ class _PuzzleScreenState extends State<PuzzleScreen>
     final now = DateTime.now().millisecondsSinceEpoch;
     if (now - _lastNudgeMs < 700) return;
     _lastNudgeMs = now;
-    final req  = grid.gateAt(path.last, target)!;
-    final tier = tierFor(req, grid.milestoneCount);
     _nudgeKind = 2;
     HapticFeedback.heavyImpact();
     AudioService.instance.denied();
     _nudge.forward(from: 0);
-    _showHint('GATE · ABSORB THE ${tier.name.toUpperCase()} FIRST');
+    _showHint('GATE · GRAB THE BOSON FIRST');
   }
 
   int? _cellAt(Offset p) {
@@ -332,6 +338,7 @@ class _PuzzleScreenState extends State<PuzzleScreen>
       final mnum    = grid.milestones[cell];
       final isLower = isMs && mnum != grid.milestoneCount;
       final viaWorm = grid.wormholeTwin(path.last) == cell;
+      final isKey   = grid.keyIdAt(cell) != null;
       path.add(cell);
       if (viaWorm) {
         HapticFeedback.mediumImpact();
@@ -340,10 +347,16 @@ class _PuzzleScreenState extends State<PuzzleScreen>
       } else {
         HapticFeedback.lightImpact();
       }
+      if (isKey) {
+        // Boson collected → its gate opens.
+        HapticFeedback.mediumImpact();
+        AudioService.instance.unlock();
+        _unlock.forward(from: 0);
+      }
       if (isLower) {
         HapticFeedback.selectionClick();
         AudioService.instance.milestone(mnum!);
-      } else if (!isMs && !viaWorm) {
+      } else if (!isMs && !viaWorm && !isKey) {
         AudioService.instance.step(path.length / grid.cellCount);
       }
       if (path.length == grid.cellCount) _onSolved();
@@ -557,7 +570,7 @@ class _PuzzleScreenState extends State<PuzzleScreen>
                           onPanStart:  (d) => _onPan(d.localPosition),
                           onPanUpdate: (d) => _onPan(d.localPosition),
                           child: AnimatedBuilder(
-                            animation: Listenable.merge([_pulse, _solve, _nudge, _warp]),
+                            animation: Listenable.merge([_pulse, _solve, _nudge, _warp, _unlock]),
                             builder: (_, _) => CustomPaint(
                               size: Size(side, side),
                               painter: _PuzzlePainter(
@@ -568,6 +581,7 @@ class _PuzzleScreenState extends State<PuzzleScreen>
                                 nudge: _nudge.value,
                                 nudgeKind: _nudgeKind,
                                 warp: _warp.value,
+                                unlock: _unlock.value,
                                 accent: _accent,
                               ),
                             ),
@@ -802,9 +816,11 @@ class _PuzzlePainter extends CustomPainter {
   final double     nudge;    // 0 → 1 "not yet" warning flash
   final int        nudgeKind; // 0 none · 1 black hole · 2 mass gate
   final double     warp;     // 0 → 1 wormhole teleport flash
+  final double     unlock;   // 0 → 1 mass-gate open ripple
   final Color      accent;
 
   static const Color _portal = Color(0xff37e0d0);  // wormhole teal
+  static const Color _boson  = Color(0xff66ffb0);  // boson / mass-gate green
 
   _PuzzlePainter({
     required this.grid,
@@ -814,6 +830,7 @@ class _PuzzlePainter extends CustomPainter {
     required this.nudge,
     required this.nudgeKind,
     required this.warp,
+    required this.unlock,
     required this.accent,
   });
 
@@ -905,33 +922,58 @@ class _PuzzlePainter extends CustomPainter {
       }
     }
 
+    // ── Boson keys ───────────────────────────────────────────────────────────
+    // The collectible that opens a mass gate. A bright green mote with a halo
+    // and a little spark cross; dims once collected.
+    grid.keys.forEach((cellIdx, _) {
+      final pos  = center(cellIdx);
+      final done = path.contains(cellIdx);
+      final a    = done ? 0.22 : 1.0;
+      final rad  = cell * 0.16 * (0.92 + pulseV * 0.16);
+      canvas.drawCircle(pos, rad * 2.4, Paint()..color = _boson.withValues(alpha: a * 0.22));
+      canvas.drawCircle(pos, rad, Paint()..color = _boson.withValues(alpha: a));
+      if (!done) {
+        final sp = Paint()
+          ..color = Colors.white.withValues(alpha: 0.85)
+          ..strokeWidth = 1.6..strokeCap = StrokeCap.round;
+        canvas.drawLine(pos - Offset(rad * 1.5, 0), pos + Offset(rad * 1.5, 0), sp);
+        canvas.drawLine(pos - Offset(0, rad * 1.5), pos + Offset(0, rad * 1.5), sp);
+      }
+    });
+
     // ── Mass gates ───────────────────────────────────────────────────────────
-    // A bar across an edge, coloured by the cosmic object that opens it. Solid +
-    // glowing while locked; faint + dashed once you've absorbed enough mass.
+    // A green bar across an edge: solid + glowing while its boson is uncollected,
+    // faint once open. Ripples green when it just opened, flashes red on a bump.
     if (grid.gates.isNotEmpty) {
-      final visited = path.where((c) => grid.milestones.containsKey(c)).length;
-      grid.gates.forEach((key, req) {
+      grid.gates.forEach((key, keyId) {
         final lo = key ~/ cc, hi = key % cc;
-        final open  = visited >= req;
-        final tier  = tierFor(req, grid.milestoneCount);
+        final open  = grid.keys.entries
+            .any((e) => e.value == keyId && path.contains(e.key));
         final flash = (nudgeKind == 2 && !open) ? nudge : 0.0;
-        final col   = Color.lerp(tier.color, const Color(0xffff4466), flash)!;
-        final a     = open ? 0.28 : (0.95);
+        final col   = Color.lerp(_boson, const Color(0xffff4466), flash)!;
         final paint = Paint()
-          ..color = col.withValues(alpha: a)
+          ..color = col.withValues(alpha: open ? 0.26 : 0.95)
           ..style = PaintingStyle.stroke
           ..strokeWidth = open ? 2.5 : 4.5 + flash * 2
           ..strokeCap = StrokeCap.round;
-        if (!open) {
-          paint.maskFilter = const MaskFilter.blur(BlurStyle.normal, 2);
-        }
-        // Vertical edge (horizontal neighbours) vs horizontal edge.
+        if (!open) paint.maskFilter = const MaskFilter.blur(BlurStyle.normal, 2);
+
+        late Offset p1, p2;
         if (hi - lo == 1 && grid.rowOf(lo) == grid.rowOf(hi)) {
           final x = grid.colOf(hi) * cell, y = grid.rowOf(lo) * cell;
-          canvas.drawLine(Offset(x, y + cell * 0.16), Offset(x, y + cell * 0.84), paint);
+          p1 = Offset(x, y + cell * 0.16); p2 = Offset(x, y + cell * 0.84);
         } else {
           final y = grid.rowOf(hi) * cell, x = grid.colOf(lo) * cell;
-          canvas.drawLine(Offset(x + cell * 0.16, y), Offset(x + cell * 0.84, y), paint);
+          p1 = Offset(x + cell * 0.16, y); p2 = Offset(x + cell * 0.84, y);
+        }
+        canvas.drawLine(p1, p2, paint);
+        // Open ripple
+        if (open && unlock > 0) {
+          final mid = (p1 + p2) / 2;
+          canvas.drawCircle(mid, cell * (0.2 + unlock * 0.7),
+            Paint()
+              ..color = _boson.withValues(alpha: (1 - unlock) * 0.7)
+              ..style = PaintingStyle.stroke..strokeWidth = 3 * (1 - unlock));
         }
       });
     }

@@ -34,6 +34,7 @@ class AudioService {
   AudioSource? _collapse;
   AudioSource? _ui;
   AudioSource? _warp;
+  AudioSource? _unlock;
   AudioSource? _pad;
   SoundHandle? _padHandle;
 
@@ -115,6 +116,12 @@ class AudioService {
     _soloud.play(_warp!, volume: 0.5);
   }
 
+  /// Collected a boson → a mass gate opens: a low thunk + rising chime.
+  void unlock() {
+    if (!_ready || _muted || _unlock == null) return;
+    _soloud.play(_unlock!, volume: 0.6);
+  }
+
   // ── Ambient bed ────────────────────────────────────────────────────────────
   Future<void> startAmbient({bool calm = false}) async {
     if (!_ready || _muted || _pad == null || _padHandle != null) return;
@@ -146,6 +153,7 @@ class AudioService {
     _denied   = await _load('denied',   _deniedTone());
     _ui       = await _load('ui',       _tick(523.25, 0.05, gain: 0.6));
     _warp     = await _load('warp',     _warpSweep());
+    _unlock   = await _load('unlock',   _unlockChime());
     _collapse = await _load('collapse', _collapseStinger());
     _pad      = await _load('pad',      _padLoop(8.0));
   }
@@ -201,6 +209,20 @@ class AudioService {
       final env = (i < atk ? i / atk : 1.0) * (1 - x);
       final vib = 1 + 0.02 * sin(2 * pi * 30 * t);
       out[i] = sin(2 * pi * f * t * vib) * env * 0.5;
+    }
+    return out;
+  }
+
+  /// A low thunk into a rising two-note chime — a mass gate unlocking.
+  Float64List _unlockChime() {
+    const durSec = 0.42;
+    final out = _alloc(durSec);
+    for (var i = 0; i < out.length; i++) {
+      final t = i / _sr;
+      var s = sin(2 * pi * 90 * t) * exp(-t * 22) * 0.7;   // thunk
+      if (t > 0.06) s += sin(2 * pi * 392.0 * (t - 0.06)) * exp(-(t - 0.06) * 6) * 0.30;
+      if (t > 0.16) s += sin(2 * pi * 587.33 * (t - 0.16)) * exp(-(t - 0.16) * 6) * 0.35;
+      out[i] = s * 0.5;
     }
     return out;
   }

@@ -148,12 +148,17 @@ board with a chosen mechanic via `PuzzleScreen(forceFeatures:, fixedLevel:)`.
   Hamiltonian solution and linking the cut point to the former last cell.
   Rendered as teal swirling portals; the worldline lifts the pen across the jump;
   `_warp` flashes on traversal (whoosh via `AudioService.warp()`).
-- **Mass gates** (`gates`: edgeKey → required milestone, level ≥ `kMassGateLevel`
-  = 7): an edge sealed until you've absorbed milestone N. Placed on a solution
-  edge crossed only after N milestones are collected. `_canStep` blocks it until
-  `_milestonesVisited() >= req`; `_nudgeGate` explains it. Drawn as a bar in the
-  required tier's colour — solid/glowing locked, faint once open. `_nudgeKind`
-  (1 black hole · 2 gate) tells the painter which element to flash red.
+- **Mass gates + boson keys** (`gates`: edgeKey → keyId; `keys`: cell → keyId;
+  level ≥ `kMassGateLevel` = 7): an edge sealed until you collect its **boson**
+  (a green collectible that is NOT a milestone, so the forced ascending order
+  doesn't grab it for free — it's an off-route fetch). The gate goes in the back
+  half of the solution and the boson before it, so the solution collects the key
+  first → solvable by construction, and the gate is a real routing detour. (The
+  earlier milestone-keyed version was pointless: ascending order always satisfied
+  it.) `_canStep` blocks until `_keyCollected(keyId)`; collecting the boson fires
+  `AudioService.unlock()` + the `_unlock` open-ripple; `_nudgeGate` → "GATE · GRAB
+  THE BOSON FIRST". Drawn green (boson = mote + spark, gate = bar: solid locked,
+  faint open). `_nudgeKind` (1 black hole · 2 gate) routes the red bump-flash.
 
 ## Collapse animation
 

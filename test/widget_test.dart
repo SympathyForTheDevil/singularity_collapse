@@ -49,19 +49,24 @@ void main() {
     for (var s = 0; s < 20; s++) {
       expect(PuzzleGrid.generate(kMassGateLevel - 1).gates, isEmpty);
     }
-    // When present, each gate sits on a solution edge the path crosses only
-    // AFTER it has collected `required` milestones → following the solution
-    // never hits a locked gate.
+    // When present, the gate's boson sits earlier in the solution than the gate
+    // edge → following the solution collects the key before crossing → never
+    // hits a locked gate. Solvable by construction.
     for (var s = 0; s < 40; s++) {
       final g = PuzzleGrid.generate(10);
       if (g.gates.isEmpty) continue;
-      var visited = 0;
-      for (var i = 0; i + 1 < g.solution.length; i++) {
-        final a = g.solution[i], b = g.solution[i + 1];
-        if (g.milestones.containsKey(a)) visited++;
-        final req = g.gateAt(a, b);
-        if (req != null) expect(visited, greaterThanOrEqualTo(req));
-      }
+      final pos = {for (var i = 0; i < g.solution.length; i++) g.solution[i]: i};
+      g.gates.forEach((edge, keyId) {
+        var gp = -1;
+        for (var i = 0; i + 1 < g.solution.length; i++) {
+          if (PuzzleGrid.edgeKey(g.solution[i], g.solution[i + 1], g.cellCount) == edge) {
+            gp = i; break;
+          }
+        }
+        expect(gp, greaterThanOrEqualTo(0));
+        final keyCell = g.keys.entries.firstWhere((e) => e.value == keyId).key;
+        expect(pos[keyCell]!, lessThanOrEqualTo(gp));   // boson before the gate
+      });
     }
   });
 
@@ -70,6 +75,7 @@ void main() {
     expect(g1.wormholes, isNotEmpty);
     final g2 = PuzzleGrid.generate(8, force: {PuzzleFeature.massGate});
     expect(g2.gates, isNotEmpty);
+    expect(g2.keys, isNotEmpty);
     final g3 = PuzzleGrid.generate(12, force: const <PuzzleFeature>{});
     expect(g3.wormholes, isEmpty);
     expect(g3.gates, isEmpty);
