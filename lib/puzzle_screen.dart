@@ -50,10 +50,12 @@ class _PuzzleScreenState extends State<PuzzleScreen>
   late final AnimationController _warp;    // wormhole teleport flash
   late final AnimationController _unlock;  // mass-gate open ripple
   late final AnimationController _sling;   // gravity-well launch streak
+  late final AnimationController _trace;   // solution-reveal tracer sweep
 
   bool _seenWormhole = false;              // gate the one-time intro hints
   bool _seenGate     = false;
   bool _seenWell     = false;
+  bool _showSolution = false;              // reveal the answer (playtest / premium)
 
   // Gravity-well launches are atomic for undo: each entry is the path index of
   // a well cell; the launch spans [idx, idx + PuzzleGrid.wellRange].
@@ -90,6 +92,8 @@ class _PuzzleScreenState extends State<PuzzleScreen>
       vsync: this, duration: const Duration(milliseconds: 600));
     _sling = AnimationController(
       vsync: this, duration: const Duration(milliseconds: 320));
+    _trace = AnimationController(
+      vsync: this, duration: const Duration(milliseconds: 2600));
     _solve = AnimationController(
       vsync: this, duration: const Duration(milliseconds: 2000))
       ..addStatusListener((s) async {
@@ -149,6 +153,7 @@ class _PuzzleScreenState extends State<PuzzleScreen>
     _warp.dispose();
     _unlock.dispose();
     _sling.dispose();
+    _trace.dispose();
     super.dispose();
   }
 
@@ -184,6 +189,8 @@ class _PuzzleScreenState extends State<PuzzleScreen>
     _unlock.reset();
     _sling.reset();
     _launches.clear();
+    _showSolution = false;     // new board → hide any revealed solution
+    _trace.stop();
     _startTimer();
     _maybeFeatureIntro();
     setState(() {});
@@ -490,6 +497,19 @@ class _PuzzleScreenState extends State<PuzzleScreen>
     AudioService.instance.ui();   // audible only when now un-muted — a confirm
   }
 
+  /// Reveal / hide the solved path. Playtest aid now; the hook for a premium
+  /// "show solution" later. Does not change the puzzle state — just an overlay.
+  void _toggleSolution() {
+    if (solved) return;
+    AudioService.instance.ui();
+    setState(() => _showSolution = !_showSolution);
+    if (_showSolution) {
+      _trace.repeat();
+    } else {
+      _trace.stop();
+    }
+  }
+
   void _onSolved() {
     _stopTimer();
     solved = true;
@@ -667,7 +687,7 @@ class _PuzzleScreenState extends State<PuzzleScreen>
                           onPanStart:  (d) => _onPan(d.localPosition),
                           onPanUpdate: (d) => _onPan(d.localPosition),
                           child: AnimatedBuilder(
-                            animation: Listenable.merge([_pulse, _solve, _nudge, _warp, _unlock, _sling]),
+                            animation: Listenable.merge([_pulse, _solve, _nudge, _warp, _unlock, _sling, _trace]),
                             builder: (_, _) => CustomPaint(
                               size: Size(side, side),
                               painter: _PuzzlePainter(
@@ -682,6 +702,8 @@ class _PuzzleScreenState extends State<PuzzleScreen>
                                 sling: _sling.value,
                                 slingFrom: _slingFrom,
                                 slingTo: _slingTo,
+                                showSolution: _showSolution,
+                                traceT: _trace.value,
                                 accent: _accent,
                               ),
                             ),
@@ -700,9 +722,14 @@ class _PuzzleScreenState extends State<PuzzleScreen>
                     children: [
                       _ctrlBtn(Icons.undo, 'UNDO', _undo,
                         enabled: !solved && path.length > 1),
-                      const SizedBox(width: 18),
+                      const SizedBox(width: 12),
                       _ctrlBtn(Icons.refresh, 'RESET', _reset,
                         enabled: !solved && path.length > 1),
+                      const SizedBox(width: 12),
+                      _ctrlBtn(
+                        _showSolution ? Icons.visibility : Icons.visibility_outlined,
+                        'SOLUTION', _toggleSolution,
+                        enabled: !solved, active: _showSolution),
                     ],
                   ),
                 ),
@@ -880,27 +907,32 @@ class _PuzzleScreenState extends State<PuzzleScreen>
 
   /// Larger labelled control for the lower bar (undo / reset).
   Widget _ctrlBtn(IconData icon, String label, VoidCallback onTap,
-      {bool enabled = true}) {
-    final c = Color(enabled ? 0xff7799aa : 0xff35485a);
+      {bool enabled = true, bool active = false}) {
+    final c = active
+        ? _accent
+        : Color(enabled ? 0xff7799aa : 0xff35485a);
     return GestureDetector(
       onTap: enabled ? onTap : null,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         decoration: BoxDecoration(
-          color: const Color(0xff0a1018),
+          color: active ? const Color(0xff1b1606) : const Color(0xff0a1018),
           borderRadius: BorderRadius.circular(10),
           border: Border.all(
-            color: Color(enabled ? 0xff223344 : 0xff15202c), width: 1.5),
+            color: active
+                ? _accent
+                : Color(enabled ? 0xff223344 : 0xff15202c),
+            width: 1.5),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(icon, color: c, size: 18),
-            const SizedBox(width: 8),
+            const SizedBox(width: 7),
             Text(label,
               style: TextStyle(
                 color: c, fontSize: 12, fontFamily: 'monospace',
-                fontWeight: FontWeight.bold, letterSpacing: 2)),
+                fontWeight: FontWeight.bold, letterSpacing: 1.5)),
           ],
         ),
       ),
@@ -920,11 +952,14 @@ class _PuzzlePainter extends CustomPainter {
   final double     sling;    // 0 → 1 gravity-well launch streak
   final int?       slingFrom;
   final int?       slingTo;
+  final bool       showSolution;
+  final double     traceT;    // 0 → 1 solution tracer sweep position
   final Color      accent;
 
   static const Color _portal = Color(0xff37e0d0);  // wormhole teal
   static const Color _boson  = Color(0xff66ffb0);  // boson / mass-gate green
   static const Color _well   = Color(0xffff5ca8);  // gravity-well magenta
+  static const Color _soln   = Color(0xff7fd8ff);  // solution-reveal cyan
 
   _PuzzlePainter({
     required this.grid,
@@ -938,6 +973,8 @@ class _PuzzlePainter extends CustomPainter {
     required this.sling,
     required this.slingFrom,
     required this.slingTo,
+    required this.showSolution,
+    required this.traceT,
     required this.accent,
   });
 
@@ -1242,6 +1279,42 @@ class _PuzzlePainter extends CustomPainter {
       canvas.drawCircle(head, hr, Paint()..color = Colors.white.withValues(alpha: 0.92));
       canvas.drawCircle(head, hr, Paint()
         ..color = accent ..style = PaintingStyle.stroke ..strokeWidth = 2);
+    }
+
+    // ── Solution reveal ──────────────────────────────────────────────────────
+    // The full solved worldline, drawn as a translucent cyan guide with a tracer
+    // sweeping along it so the route order reads. Wormhole jumps lift the pen.
+    if (showSolution && grid.solution.length >= 2) {
+      final sol = grid.solution;
+      final guide = Path()..moveTo(center(sol.first).dx, center(sol.first).dy);
+      for (var i = 1; i < sol.length; i++) {
+        if (grid.adjacent(sol[i - 1], sol[i])) {
+          guide.lineTo(center(sol[i]).dx, center(sol[i]).dy);
+        } else {
+          guide.moveTo(center(sol[i]).dx, center(sol[i]).dy);
+        }
+      }
+      canvas.drawPath(guide, Paint()
+        ..color = _soln.withValues(alpha: 0.30)
+        ..style = PaintingStyle.stroke ..strokeWidth = cell * 0.16
+        ..strokeJoin = StrokeJoin.round ..strokeCap = StrokeCap.round
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4));
+      canvas.drawPath(guide, Paint()
+        ..color = _soln.withValues(alpha: 0.85)
+        ..style = PaintingStyle.stroke ..strokeWidth = 2.2
+        ..strokeJoin = StrokeJoin.round ..strokeCap = StrokeCap.round);
+
+      // Tracer dot sweeping the route to show direction/order.
+      final fp = (traceT * (sol.length - 1)).clamp(0.0, (sol.length - 1).toDouble());
+      final i0 = fp.floor(), i1 = (i0 + 1).clamp(0, sol.length - 1);
+      final a = center(sol[i0]), b = center(sol[i1]);
+      // Snap (don't interpolate) across a wormhole jump.
+      final tp = grid.adjacent(sol[i0], sol[i1])
+          ? Offset.lerp(a, b, fp - i0)! : a;
+      canvas.drawCircle(tp, cell * 0.16,
+        Paint()..color = _soln.withValues(alpha: 0.5)
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6));
+      canvas.drawCircle(tp, cell * 0.09, Paint()..color = Colors.white);
     }
 
     // Outer border
