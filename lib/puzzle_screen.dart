@@ -57,9 +57,10 @@ class _PuzzleScreenState extends State<PuzzleScreen>
   bool _seenWell     = false;
   bool _showSolution = false;              // reveal the answer (playtest / premium)
 
-  // Gravity-well launches are atomic for undo: each entry is the path index of
-  // a well cell; the launch spans [idx, idx + PuzzleGrid.wellRange].
-  final Set<int> _launches = {};
+  // Atomic moves (a gravity-well launch or a wormhole teleport) span several
+  // cells but undo/rewind as one unit. Maps the path index of the move's first
+  // cell → the number of cells it added.
+  final Map<int, int> _atomic = {};
   int? _slingFrom, _slingTo;               // cells the current launch streaks between
 
   // Transient in-context hint shown in the NEXT line (e.g. why a move was blocked).
@@ -188,7 +189,7 @@ class _PuzzleScreenState extends State<PuzzleScreen>
     _warp.reset();
     _unlock.reset();
     _sling.reset();
-    _launches.clear();
+    _atomic.clear();
     _showSolution = false;     // new board → hide any revealed solution
     _trace.stop();
     _startTimer();
@@ -205,19 +206,21 @@ class _PuzzleScreenState extends State<PuzzleScreen>
     _warp.reset();   // portals back to their idle look
     _unlock.reset();
     _sling.reset();
-    _launches.clear();
+    _atomic.clear();
     HapticFeedback.mediumImpact();
     setState(() {});
   }
 
-  /// Step back one move. A gravity-well launch is atomic — it undoes the whole
-  /// fling (well cell + the cells it flung you through), not one corridor cell.
+  /// Step back one move. Atomic moves (well launch / wormhole teleport) undo as
+  /// a whole unit, not one intermediate cell.
   void _undo() {
     if (solved || path.length < 2) return;
-    final wellStart = path.length - 1 - PuzzleGrid.wellRange;
-    if (_launches.contains(wellStart)) {
-      path.removeRange(wellStart, path.length);
-      _launches.remove(wellStart);
+    final last = path.length - 1;
+    int? start;
+    _atomic.forEach((s, len) { if (s + len - 1 == last) start = s; });
+    if (start != null) {
+      path.removeRange(start!, path.length);
+      _atomic.remove(start);
     } else {
       path.removeLast();
     }
@@ -227,17 +230,15 @@ class _PuzzleScreenState extends State<PuzzleScreen>
   }
 
   /// Truncate the worldline back to [cell] (drops everything after it). If the
-  /// tapped cell sits inside a launch, snap to just before the well.
+  /// tapped cell sits inside an atomic move, snap to just before that move.
   void _truncateTo(int cell) {
     if (solved) return;
     var i = path.indexOf(cell);
     if (i < 0 || i == path.length - 1) return;
-    for (final w in _launches) {
-      if (i >= w && i <= w + PuzzleGrid.wellRange) i = w - 1;
-    }
+    _atomic.forEach((s, len) { if (i >= s && i <= s + len - 1) i = s - 1; });
     if (i < 0) return;
     path.removeRange(i + 1, path.length);
-    _launches.removeWhere((w) => w > i);
+    _atomic.removeWhere((s, len) => s > i);
     _clearHint();
     HapticFeedback.selectionClick();
     setState(() {});
@@ -286,16 +287,11 @@ class _PuzzleScreenState extends State<PuzzleScreen>
 
   bool _canStep(int target) {
     final head = path.last;
-    // A wormhole twin is reachable directly (and carries no wall); otherwise the
-    // target must be a wall-free grid neighbour.
-    final viaWorm = grid.wormholeTwin(head) == target;
-    if (!viaWorm) {
-      if (!grid.adjacent(head, target)) return false;
-      if (grid.hasWall(head, target))   return false;
-      final keyId = grid.gateKeyAt(head, target);   // sealed until its boson is taken
-      if (keyId != null && !_keyCollected(keyId)) return false;
-    }
-    if (path.contains(target))          return false;
+    if (!grid.adjacent(head, target)) return false;
+    if (grid.hasWall(head, target))   return false;
+    if (path.contains(target))        return false;
+    final keyId = grid.gateKeyAt(head, target);   // sealed until its boson is taken
+    if (keyId != null && !_keyCollected(keyId)) return false;
     final m = grid.milestones[target];
     if (m != null) {
       if (m != _milestonesVisited() + 1) return false;
@@ -306,6 +302,9 @@ class _PuzzleScreenState extends State<PuzzleScreen>
     // A gravity well only accepts you if its whole launch corridor is clear.
     final wdir = grid.wellDir(target);
     if (wdir != null && !_wellCorridorClear(target, wdir)) return false;
+    // A wormhole forces a teleport on entry — its twin must be free to land on.
+    final twin = grid.wormholeTwin(target);
+    if (twin != null && path.contains(twin)) return false;
     return true;
   }
 
@@ -405,9 +404,12 @@ class _PuzzleScreenState extends State<PuzzleScreen>
     if (cell == null || cell == path.last) return;
 
     if (path.length >= 2 && cell == path[path.length - 2]) {
-      // A gravity-well launch is atomic — don't unwind it by dragging back
-      // through its corridor; the Undo button handles that.
-      if (_launches.contains(path.length - 1 - PuzzleGrid.wellRange)) return;
+      // Atomic moves (well launch / wormhole teleport) don't unwind by dragging
+      // back through them — the Undo button handles that as one unit.
+      final last = path.length - 1;
+      if (_atomic.entries.any((e) => last >= e.key && last <= e.key + e.value - 1)) {
+        return;
+      }
       // Deliberate pull-back into the previous cell = undo; a mere edge graze
       // during forward motion is ignored.
       if (_deepInside(local, cell)) {
@@ -424,7 +426,7 @@ class _PuzzleScreenState extends State<PuzzleScreen>
       final wdir = grid.wellDir(cell);
       if (wdir != null) {
         final launch = _wellPath(cell, wdir);   // well + the cells it flings through
-        _launches.add(path.length);             // remember the well's index
+        _atomic[path.length] = launch.length;   // atomic for undo
         path.addAll(launch);
         _slingFrom = launch.first;
         _slingTo   = launch.last;
@@ -436,19 +438,27 @@ class _PuzzleScreenState extends State<PuzzleScreen>
         return;
       }
 
-      final isMs    = grid.milestones.containsKey(cell);
-      final mnum    = grid.milestones[cell];
-      final isLower = isMs && mnum != grid.milestoneCount;
-      final viaWorm = grid.wormholeTwin(path.last) == cell;
-      final isKey   = grid.keyIdAt(cell) != null;
-      path.add(cell);
-      if (viaWorm) {
+      // ── Wormhole forced teleport ────────────────────────────────────────
+      // Entering a portal whisks you out its twin — you can't walk through it.
+      final twin = grid.wormholeTwin(cell);
+      if (twin != null) {
+        _atomic[path.length] = 2;
+        path..add(cell)..add(twin);
+        _slingFrom = null; _slingTo = null;
         HapticFeedback.mediumImpact();
         AudioService.instance.warp();
         _warp.forward(from: 0);
-      } else {
-        HapticFeedback.lightImpact();
+        if (path.length == grid.cellCount) _onSolved();
+        setState(() {});
+        return;
       }
+
+      final isMs    = grid.milestones.containsKey(cell);
+      final mnum    = grid.milestones[cell];
+      final isLower = isMs && mnum != grid.milestoneCount;
+      final isKey   = grid.keyIdAt(cell) != null;
+      path.add(cell);
+      HapticFeedback.lightImpact();
       if (isKey) {
         // Boson collected → its gate opens.
         HapticFeedback.mediumImpact();
@@ -458,7 +468,7 @@ class _PuzzleScreenState extends State<PuzzleScreen>
       if (isLower) {
         HapticFeedback.selectionClick();
         AudioService.instance.milestone(mnum!);
-      } else if (!isMs && !viaWorm && !isKey) {
+      } else if (!isMs && !isKey) {
         AudioService.instance.step(path.length / grid.cellCount);
       }
       if (path.length == grid.cellCount) _onSolved();
@@ -1226,8 +1236,13 @@ class _PuzzlePainter extends CustomPainter {
       final rad  = cell * (0.20 + frac * 0.14);
 
       if (next) {
-        canvas.drawCircle(pos, rad + 5 + pulseV * 3,
-          Paint()..color = tier.color.withValues(alpha: 0.30));
+        // Soft halo + a crisp pulsing ring so the next target reads clearly.
+        canvas.drawCircle(pos, rad + 6 + pulseV * 4,
+          Paint()..color = tier.color.withValues(alpha: 0.42)
+            ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4));
+        canvas.drawCircle(pos, rad + 4 + pulseV * 3,
+          Paint()..color = tier.color.withValues(alpha: 0.55 + pulseV * 0.25)
+            ..style = PaintingStyle.stroke ..strokeWidth = 2);
       }
 
       if (tier.isBlackHole) {
