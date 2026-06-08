@@ -211,7 +211,7 @@ class _PuzzleScreenState extends State<PuzzleScreen>
     final nextTier = tierFor(
       (_milestonesVisited() + 1).clamp(1, grid.milestoneCount),
       grid.milestoneCount);
-    final now      = DateTime.now();
+    final now      = DateTime.now().toUtc();
     final dateStr  = '${now.month.toString().padLeft(2,'0')}-${now.day.toString().padLeft(2,'0')}';
 
     return Scaffold(

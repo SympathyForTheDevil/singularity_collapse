@@ -7,18 +7,20 @@ class DailyService {
   static String _fmt(DateTime d) =>
       '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 
-  static String todayStr() => _fmt(DateTime.now());
+  static DateTime _today() => DateTime.now().toUtc();
 
-  /// Integer seed stable for the calendar day — same day → same puzzle for everyone.
+  static String todayStr() => _fmt(_today());
+
+  /// Integer seed stable for the UTC calendar day — same day → same puzzle for everyone.
   static int todaySeed() {
-    final n = DateTime.now();
+    final n = _today();
     return n.year * 10000 + n.month * 100 + n.day;
   }
 
   /// Difficulty ramps from day 1 (5×5) and plateaus at 8×8 around day 9.
   static int dailyLevel() {
-    final epoch = DateTime(2026, 6, 8);
-    final days  = DateTime.now().difference(epoch).inDays;
+    final epoch = DateTime.utc(2026, 6, 8);
+    final days  = _today().difference(epoch).inDays;
     return (days + 1).clamp(1, 15);
   }
 
@@ -39,7 +41,7 @@ class DailyService {
     final last      = prefs.getString(_keyLastSolved);
     if (last == today) return prefs.getInt(_keyStreak) ?? 1;
 
-    final yesterday = _fmt(DateTime.now().subtract(const Duration(days: 1)));
+    final yesterday = _fmt(_today().subtract(const Duration(days: 1)));
     final prev      = prefs.getInt(_keyStreak) ?? 0;
     final streak    = (last == yesterday) ? prev + 1 : 1;
     await prefs.setString(_keyLastSolved, today);
