@@ -268,18 +268,31 @@ class _PuzzleScreenState extends State<PuzzleScreen>
     final rng = _isDaily ? Random(DailyService.todaySeed()) : null;  // null → fresh random each puzzle
     final lvl = widget.fixedLevel ?? (_isDaily ? DailyService.dailyLevel() : level);
 
-    // Quantum mode: each board is a random pick from the player's chosen types
-    // (an empty force-set = a plain board). Exclusive mechanics come alone; the
-    // others are forced one at a time. Level still drives difficulty.
+    // Quantum mode: each board rolls one "recipe" from the player's chosen types
+    // — a plain board, a single exclusive mechanic (entangled/multiverse come
+    // alone), or a random *combo* of the chosen additive mechanics (wormhole/
+    // gate/well can share a board, as they do in Infinity). Level drives difficulty.
     var force = widget.forceFeatures;
     int? mvBoards = widget.multiverseBoards;
     if (_isQuantum) {
-      final choices = <Set<PuzzleFeature>>[
-        if (widget.quantumNormal) <PuzzleFeature>{},
-        for (final f in widget.quantumFeatures) {f},
+      const additive = {
+        PuzzleFeature.wormhole, PuzzleFeature.massGate, PuzzleFeature.gravityWell,
+      };
+      final rnd = Random();
+      final sel = widget.quantumFeatures;
+      final selAdditive  = sel.where(additive.contains).toList();
+      final selExclusive = sel.where((f) => !additive.contains(f)).toList();
+      final recipes = <Set<PuzzleFeature> Function()>[
+        if (widget.quantumNormal) () => <PuzzleFeature>{},
+        for (final f in selExclusive) () => {f},
+        if (selAdditive.isNotEmpty)
+          () {
+            final s = [...selAdditive]..shuffle(rnd);
+            return s.take(1 + rnd.nextInt(s.length)).toSet();   // 1..all of them
+          },
       ];
-      force = (choices.isEmpty ? <PuzzleFeature>{} : choices[Random().nextInt(choices.length)]);
-      if (force.contains(PuzzleFeature.multiverse)) mvBoards = Random().nextBool() ? 3 : 2;
+      force = recipes.isEmpty ? <PuzzleFeature>{} : recipes[rnd.nextInt(recipes.length)]();
+      if (force.contains(PuzzleFeature.multiverse)) mvBoards = rnd.nextBool() ? 3 : 2;
     }
 
     grid = PuzzleGrid.generate(lvl, rng: rng, force: force, multiverseBoards: mvBoards);

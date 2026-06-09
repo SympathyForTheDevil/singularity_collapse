@@ -1,3 +1,4 @@
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'puzzle_model.dart';
@@ -46,9 +47,10 @@ const List<GuideEntry> kGuideEntries = [
     'The finish. You can only enter it once every other cell is filled — it '
     'collapses the region and ends the stage.',
     'seen_core', 1),
-  GuideEntry('wormhole', 'Wormhole',
-    'Two linked portals. Enter one and your timeline instantly emerges from its '
-    'twin — you cannot pass through a portal without taking the jump.',
+  GuideEntry('wormhole', 'Bi-directional Wormhole',
+    'Two linked portals you can cross in EITHER direction — enter one and your '
+    'timeline emerges from its twin (you cannot pass through without taking the '
+    'jump). Appears within a region, and as a two-way bridge between universes.',
     'seen_wormhole', kWormholeLevel),
   GuideEntry('gate', 'Mass Gate',
     'A sealed barrier across the path. It stays locked until you collect its '
@@ -74,6 +76,12 @@ const List<GuideEntry> kGuideEntries = [
     'dark mouth feeding a bright white hole) only go one way — no return. A '
     'bridge is coloured by the universe it leads to. Fill EVERY cell of EVERY '
     'universe; finish on the Black Hole.',
+    'seen_multiverse', kMultiverseLevel),
+  GuideEntry('bridge', 'Einstein–Rosen Bridge',
+    'A ONE-WAY bridge between universes: fall into the dark mouth and you are '
+    'ejected from a bright white hole far away — but you can never return through '
+    'it. (A two-way wormhole, by contrast, crosses either direction.) Its colour '
+    'tells you which universe it leads to. Plan the crossing carefully.',
     'seen_multiverse', kMultiverseLevel),
 ];
 
@@ -192,6 +200,27 @@ class _GuideIconPainter extends CustomPainter {
         canvas.drawPath(a, Paint()
           ..color = _well ..style = PaintingStyle.stroke ..strokeWidth = 2.5
           ..strokeJoin = StrokeJoin.round);
+      case 'bridge':
+        const lav = Color(0xffc9b8ff);
+        const cy  = Color(0xff99eeff);
+        // Dark mouth (left) → radiant white hole (right), with a one-way arrow.
+        canvas.drawCircle(Offset(u * 0.26, c.dy), u * 0.13,
+          Paint()..color = const Color(0xff09060f));
+        canvas.drawCircle(Offset(u * 0.26, c.dy), u * 0.13, Paint()
+          ..color = lav ..style = PaintingStyle.stroke ..strokeWidth = 2);
+        canvas.drawCircle(Offset(u * 0.74, c.dy), u * 0.10,
+          Paint()..color = const Color(0xffeaffff));
+        for (var k = 0; k < 8; k++) {
+          final a = k * pi / 4, uu = Offset(cos(a), sin(a));
+          canvas.drawLine(Offset(u * 0.74, c.dy) + uu * (u * 0.13),
+            Offset(u * 0.74, c.dy) + uu * (u * 0.18),
+            Paint()..color = cy ..strokeWidth = 1.4 ..strokeCap = StrokeCap.round);
+        }
+        final ar = Paint()..color = lav.withValues(alpha: 0.75)
+          ..strokeWidth = 1.6 ..strokeCap = StrokeCap.round;
+        canvas.drawLine(Offset(u * 0.42, c.dy), Offset(u * 0.56, c.dy), ar);
+        canvas.drawLine(Offset(u * 0.56, c.dy), Offset(u * 0.50, c.dy - u * 0.05), ar);
+        canvas.drawLine(Offset(u * 0.56, c.dy), Offset(u * 0.50, c.dy + u * 0.05), ar);
       case 'multiverse':
         const azure = Color(0xff36d0ff);
         // Two stacked universe panels (gold + azure) linked by a portal bridge.
