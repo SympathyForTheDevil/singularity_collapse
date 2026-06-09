@@ -264,7 +264,13 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
             _devBtn('WORMHOLE',       {PuzzleFeature.wormhole}, 5),
             _devBtn('MASS GATE',      {PuzzleFeature.massGate}, 8),
             _devBtn('GRAVITY WELL',   {PuzzleFeature.gravityWell}, 11),
-            _devBtn('ALL MECHANICS',  PuzzleFeature.values.toSet(), 12),
+            _devBtn('ENTANGLED PAIR', {PuzzleFeature.entangled}, 8),
+            // Entangled is exclusive (it reshapes the solution), so keep it out
+            // of the combined set.
+            _devBtn('ALL (NO QUANTUM)', {
+              PuzzleFeature.wormhole, PuzzleFeature.massGate,
+              PuzzleFeature.gravityWell,
+            }, 12),
             const SizedBox(height: 20),
             GestureDetector(
               onTap: () => setState(() => _showDev = false),

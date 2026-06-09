@@ -36,6 +36,7 @@ class AudioService {
   AudioSource? _warp;
   AudioSource? _unlock;
   AudioSource? _sling;
+  AudioSource? _measure;
   AudioSource? _pad;
   SoundHandle? _padHandle;
 
@@ -129,6 +130,12 @@ class AudioService {
     _soloud.play(_sling!, volume: 0.5);
   }
 
+  /// Entangled superposition collapses on measurement — a glassy shimmer.
+  void measure() {
+    if (!_ready || _muted || _measure == null) return;
+    _soloud.play(_measure!, volume: 0.55);
+  }
+
   // ── Ambient bed ────────────────────────────────────────────────────────────
   Future<void> startAmbient({bool calm = false}) async {
     if (!_ready || _muted || _pad == null || _padHandle != null) return;
@@ -162,6 +169,7 @@ class AudioService {
     _warp     = await _load('warp',     _warpSweep());
     _unlock   = await _load('unlock',   _unlockChime());
     _sling    = await _load('sling',    _slingSweep());
+    _measure  = await _load('measure',  _measureChime());
     _collapse = await _load('collapse', _collapseStinger());
     _pad      = await _load('pad',      _padLoop(8.0));
   }
@@ -217,6 +225,24 @@ class AudioService {
       final env = (i < atk ? i / atk : 1.0) * (1 - x);
       final vib = 1 + 0.02 * sin(2 * pi * 30 * t);
       out[i] = sin(2 * pi * f * t * vib) * env * 0.5;
+    }
+    return out;
+  }
+
+  /// A glassy high shimmer that glides down and rings out — a wavefunction
+  /// collapsing on measurement.
+  Float64List _measureChime() {
+    const durSec = 0.4;
+    final out = _alloc(durSec);
+    const freqs = [1318.5, 1567.98, 1760.0, 2093.0];
+    for (var i = 0; i < out.length; i++) {
+      final t = i / _sr;
+      final x = t / durSec;
+      var s = 0.0;
+      for (var k = 0; k < freqs.length; k++) {
+        s += sin(2 * pi * freqs[k] * (1 - 0.3 * x) * t) / (k + 1.5);
+      }
+      out[i] = s * exp(-t * 9) * 0.3;
     }
     return out;
   }

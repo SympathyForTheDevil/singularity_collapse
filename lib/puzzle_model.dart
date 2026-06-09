@@ -14,7 +14,7 @@ import 'dart:math';
 /// solution doesn't use. → infinite, always-solvable puzzles.
 /// Special mechanics that can be woven into the core puzzle. Each unlocks at a
 /// skill-gate level (below), or can be forced on for testing via the dev menu.
-enum PuzzleFeature { wormhole, massGate, gravityWell }
+enum PuzzleFeature { wormhole, massGate, gravityWell, entangled }
 
 /// Levels below these never spawn the feature — they unlock as skill gates so
 /// players meet them only after the basic trace is second nature.
@@ -31,6 +31,8 @@ class PuzzleGrid {
   final Map<int, int> gates;      // edgeKey -> key id that opens it
   final Map<int, int> keys;       // cell -> key id (the "boson" collectible)
   final Map<int, int> wells;      // cell -> direction delta (gravity-well launch)
+  final int quantumCell;          // entangled twin ON the solution (-1 if none)
+  final int ghostCell;            // entangled twin OFF the solution (vanishes)
 
   /// How many cells a gravity well flings you (in addition to the well cell).
   static const int wellRange = 2;
@@ -44,10 +46,22 @@ class PuzzleGrid {
     this.gates = const {},
     this.keys = const {},
     this.wells = const {},
+    this.quantumCell = -1,
+    this.ghostCell = -1,
   });
 
   /// Launch direction delta for the well on [cell], or null.
   int? wellDir(int cell) => wells[cell];
+
+  /// This board has an entangled pair (two superposed cells; one vanishes).
+  bool get hasQuantum => ghostCell >= 0;
+  bool isQuantum(int cell) => hasQuantum && (cell == quantumCell || cell == ghostCell);
+  int  quantumTwin(int cell) =>
+      cell == quantumCell ? ghostCell : (cell == ghostCell ? quantumCell : -1);
+
+  /// Cells that must be filled to win. With an entangled pair, exactly one twin
+  /// is measured and the other vanishes, so it's one fewer than [cellCount].
+  int get fillCount => cellCount - (hasQuantum ? 1 : 0);
 
   bool isWormhole(int cell)   => wormholes.containsKey(cell);
   int? wormholeTwin(int cell) => wormholes[cell];
@@ -133,8 +147,33 @@ class PuzzleGrid {
         ?? (level >= kMassGateLevel);
     final wantWell = force?.contains(PuzzleFeature.gravityWell)
         ?? (level >= kGravityWellLevel);
+    // Entangled pair is force-only for now (its own deduction mode).
+    final wantEntangled = force?.contains(PuzzleFeature.entangled) ?? false;
 
     var sol = _hamiltonian(size, r) ?? _snake(size);
+
+    // ── Entangled pair (force-only) ──────────────────────────────────────────
+    // One cosmic object in superposition across two cells. The solution covers
+    // every cell EXCEPT the off-path "ghost" twin (which vanishes when the other
+    // is measured). The two twins are opposite checkerboard colours, so removing
+    // the ON-path twin instead would break the start/end parity → that collapse
+    // is provably unsolvable. Right-choice deduction, solvable by construction.
+    var quantumCell = -1, ghostCell = -1;
+    if (wantEntangled) {
+      int colour(int c) => ((c ~/ size) + (c % size)) % 2;
+      for (var t = 0; t < 80 && ghostCell < 0; t++) {
+        final b = r.nextInt(n);
+        final s = _hamiltonianExcluding(size, b, r);
+        if (s == null) continue;
+        final cands = s
+            .where((c) => c != s.first && c != s.last && colour(c) != colour(b))
+            .toList();
+        if (cands.isEmpty) continue;
+        sol = s;
+        ghostCell = b;
+        quantumCell = cands[r.nextInt(cands.length)];
+      }
+    }
 
     // ── Wormhole (skill-gated) ───────────────────────────────────────────────
     // Insert exactly one teleport by reversing the tail of the solution and
@@ -164,13 +203,16 @@ class PuzzleGrid {
 
     // Milestones: #1 pinned to the start, the Black Hole pinned to the LAST cell,
     // the rest at random increasing positions between. Capped so each milestone
-    // is a distinct cosmic tier (Particle … Neutron Star, then Black Hole).
-    final k = (4 + level ~/ 2).clamp(4, 7).clamp(2, n);
-    final idxSet = <int>{0, n - 1};
+    // is a distinct cosmic tier (Particle … Neutron Star, then Black Hole). Uses
+    // sol.length (= n, or n-1 when an entangled twin is excluded).
+    final slen = sol.length;
+    final qPos = quantumCell >= 0 ? sol.indexOf(quantumCell) : -1;
+    final k = (4 + level ~/ 2).clamp(4, 7).clamp(2, slen);
+    final idxSet = <int>{0, slen - 1};
     var guard = 0;
     while (idxSet.length < k && guard++ < 2000) {
-      final p = 1 + r.nextInt(n - 2);
-      if (!wormPositions.contains(p)) idxSet.add(p);  // keep portals milestone-free
+      final p = 1 + r.nextInt(slen - 2);
+      if (!wormPositions.contains(p) && p != qPos) idxSet.add(p);
     }
     final idx = idxSet.toList()..sort();
     final ms = <int, int>{};
@@ -260,10 +302,15 @@ class PuzzleGrid {
       final err  = (_branching(sol, ms, cand, size) - target).abs();
       if (err < bestErr) { bestErr = err; walls = cand; if (err == 0) break; }
     }
+    // Keep the ghost twin reachable so the (wrong) choice is actually available.
+    if (ghostCell >= 0) {
+      walls.removeWhere((key) => key ~/ n == ghostCell || key % n == ghostCell);
+    }
 
     return PuzzleGrid(
       size: size, solution: sol, milestones: ms, walls: walls,
-      wormholes: wormholes, gates: gates, keys: keys, wells: wells);
+      wormholes: wormholes, gates: gates, keys: keys, wells: wells,
+      quantumCell: quantumCell, ghostCell: ghostCell);
   }
 
   /// Target branching-difficulty for a level — a smooth ramp. Best-of-N walls
@@ -285,6 +332,34 @@ class PuzzleGrid {
       }
     }
     return walls;
+  }
+
+  /// A Hamiltonian path covering every cell EXCEPT [blocked] (n-1 cells), via
+  /// the same Warnsdorff heuristic. Used for the entangled pair's solution.
+  static List<int>? _hamiltonianExcluding(int size, int blocked, Random rng) {
+    final n = size * size;
+    for (var attempt = 0; attempt < 400; attempt++) {
+      final start = rng.nextInt(n);
+      if (start == blocked) continue;
+      final visited = List<bool>.filled(n, false);
+      visited[blocked] = true;                 // exclude the ghost cell
+      final path = <int>[start];
+      visited[start] = true;
+      var cur = start;
+      var stuck = false;
+      while (path.length < n - 1) {
+        final nbrs = _neigh(cur, size).where((x) => !visited[x]).toList();
+        if (nbrs.isEmpty) { stuck = true; break; }
+        nbrs.shuffle(rng);
+        nbrs.sort((a, b) => _countUnvisited(a, visited, size)
+            .compareTo(_countUnvisited(b, visited, size)));
+        cur = nbrs.first;
+        visited[cur] = true;
+        path.add(cur);
+      }
+      if (!stuck && path.length == n - 1) return path;
+    }
+    return null;
   }
 
   /// Randomized Hamiltonian path via Warnsdorff's heuristic with random restarts.

@@ -51,6 +51,7 @@ class _PuzzleScreenState extends State<PuzzleScreen>
   late final AnimationController _unlock;  // mass-gate open ripple
   late final AnimationController _sling;   // gravity-well launch streak
   late final AnimationController _trace;   // solution-reveal tracer sweep
+  late final AnimationController _measure; // entangled collapse flash
 
   // First-encounter teaching cards. A mechanic is taught once, ever.
   final Set<String> _seenKeys = {};        // persisted "encountered" flags
@@ -96,6 +97,8 @@ class _PuzzleScreenState extends State<PuzzleScreen>
       vsync: this, duration: const Duration(milliseconds: 320));
     _trace = AnimationController(
       vsync: this, duration: const Duration(milliseconds: 2600));
+    _measure = AnimationController(
+      vsync: this, duration: const Duration(milliseconds: 650));
     _solve = AnimationController(
       vsync: this, duration: const Duration(milliseconds: 2000))
       ..addStatusListener((s) async {
@@ -129,6 +132,7 @@ class _PuzzleScreenState extends State<PuzzleScreen>
       'seen_wormhole' => grid.wormholes.isNotEmpty,
       'seen_gate'     => grid.gates.isNotEmpty,
       'seen_well'     => grid.wells.isNotEmpty,
+      'seen_entangled'=> grid.hasQuantum,
       _               => false,
     };
     for (final card in kTutorialCards) {
@@ -162,6 +166,7 @@ class _PuzzleScreenState extends State<PuzzleScreen>
     _unlock.dispose();
     _sling.dispose();
     _trace.dispose();
+    _measure.dispose();
     super.dispose();
   }
 
@@ -196,6 +201,7 @@ class _PuzzleScreenState extends State<PuzzleScreen>
     _warp.reset();
     _unlock.reset();
     _sling.reset();
+    _measure.reset();
     _atomic.clear();
     _showSolution = false;     // new board → hide any revealed solution
     _trace.stop();
@@ -214,6 +220,7 @@ class _PuzzleScreenState extends State<PuzzleScreen>
     _warp.reset();   // portals back to their idle look
     _unlock.reset();
     _sling.reset();
+    _measure.reset();
     _atomic.clear();
     HapticFeedback.mediumImpact();
     setState(() {});
@@ -276,7 +283,7 @@ class _PuzzleScreenState extends State<PuzzleScreen>
     if (!grid.adjacent(head, target))           return false;
     if (grid.hasWall(head, target))             return false;
     if (path.contains(target))                  return false;
-    return path.length != grid.cellCount - 1;
+    return path.length != grid.fillCount - 1;
   }
 
   void _nudgeBlackHole() {
@@ -293,17 +300,27 @@ class _PuzzleScreenState extends State<PuzzleScreen>
   int _milestonesVisited() =>
       path.where((c) => grid.milestones.containsKey(c)).length;
 
+  /// The entangled twin that has collapsed (voided), derived from the path so it
+  /// auto-reverts on undo. -1 if no pair, or the pair hasn't been measured yet.
+  int get _collapsedCell {
+    if (!grid.hasQuantum) return -1;
+    if (path.contains(grid.quantumCell)) return grid.ghostCell;
+    if (path.contains(grid.ghostCell))   return grid.quantumCell;
+    return -1;
+  }
+
   bool _canStep(int target) {
     final head = path.last;
     if (!grid.adjacent(head, target)) return false;
     if (grid.hasWall(head, target))   return false;
     if (path.contains(target))        return false;
+    if (target == _collapsedCell)     return false;   // a vanished twin
     final keyId = grid.gateKeyAt(head, target);   // sealed until its boson is taken
     if (keyId != null && !_keyCollected(keyId)) return false;
     final m = grid.milestones[target];
     if (m != null) {
       if (m != _milestonesVisited() + 1) return false;
-      if (m == grid.milestoneCount && path.length != grid.cellCount - 1) {
+      if (m == grid.milestoneCount && path.length != grid.fillCount - 1) {
         return false;
       }
     }
@@ -441,7 +458,7 @@ class _PuzzleScreenState extends State<PuzzleScreen>
         HapticFeedback.mediumImpact();
         AudioService.instance.slingshot();
         _sling.forward(from: 0);
-        if (path.length == grid.cellCount) _onSolved();
+        if (path.length == grid.fillCount) _onSolved();
         setState(() {});
         return;
       }
@@ -456,7 +473,7 @@ class _PuzzleScreenState extends State<PuzzleScreen>
         HapticFeedback.mediumImpact();
         AudioService.instance.warp();
         _warp.forward(from: 0);
-        if (path.length == grid.cellCount) _onSolved();
+        if (path.length == grid.fillCount) _onSolved();
         setState(() {});
         return;
       }
@@ -465,6 +482,7 @@ class _PuzzleScreenState extends State<PuzzleScreen>
       final mnum    = grid.milestones[cell];
       final isLower = isMs && mnum != grid.milestoneCount;
       final isKey   = grid.keyIdAt(cell) != null;
+      final isMeasure = grid.isQuantum(cell) && _collapsedCell < 0; // measuring now
       path.add(cell);
       HapticFeedback.lightImpact();
       if (isKey) {
@@ -473,13 +491,19 @@ class _PuzzleScreenState extends State<PuzzleScreen>
         AudioService.instance.unlock();
         _unlock.forward(from: 0);
       }
+      if (isMeasure) {
+        // Superposition collapses — the twin vanishes.
+        HapticFeedback.mediumImpact();
+        AudioService.instance.measure();
+        _measure.forward(from: 0);
+      }
       if (isLower) {
         HapticFeedback.selectionClick();
         AudioService.instance.milestone(mnum!);
-      } else if (!isMs && !isKey) {
+      } else if (!isMs && !isKey && !isMeasure) {
         AudioService.instance.step(path.length / grid.cellCount);
       }
-      if (path.length == grid.cellCount) _onSolved();
+      if (path.length == grid.fillCount) _onSolved();
       setState(() {});
     } else if (_isBlackHoleEarly(cell)) {
       _nudgeBlackHole();   // explain the block instead of silently rejecting it
@@ -574,7 +598,7 @@ class _PuzzleScreenState extends State<PuzzleScreen>
   @override
   Widget build(BuildContext context) {
     final filled   = path.length;
-    final total    = grid.cellCount;
+    final total    = grid.fillCount;
     final nextTier = tierFor(
       (_milestonesVisited() + 1).clamp(1, grid.milestoneCount),
       grid.milestoneCount);
@@ -705,7 +729,7 @@ class _PuzzleScreenState extends State<PuzzleScreen>
                           onPanStart:  (d) => _onPan(d.localPosition),
                           onPanUpdate: (d) => _onPan(d.localPosition),
                           child: AnimatedBuilder(
-                            animation: Listenable.merge([_pulse, _solve, _nudge, _warp, _unlock, _sling, _trace]),
+                            animation: Listenable.merge([_pulse, _solve, _nudge, _warp, _unlock, _sling, _trace, _measure]),
                             builder: (_, _) => CustomPaint(
                               size: Size(side, side),
                               painter: _PuzzlePainter(
@@ -722,6 +746,8 @@ class _PuzzleScreenState extends State<PuzzleScreen>
                                 slingTo: _slingTo,
                                 showSolution: _showSolution,
                                 traceT: _trace.value,
+                                collapsedCell: _collapsedCell,
+                                measureT: _measure.value,
                                 accent: _accent,
                               ),
                             ),
@@ -1022,12 +1048,15 @@ class _PuzzlePainter extends CustomPainter {
   final int?       slingTo;
   final bool       showSolution;
   final double     traceT;    // 0 → 1 solution tracer sweep position
+  final int        collapsedCell; // entangled twin that vanished (-1 none)
+  final double     measureT;  // 0 → 1 entangled collapse flash
   final Color      accent;
 
-  static const Color _portal = Color(0xff37e0d0);  // wormhole teal
-  static const Color _boson  = Color(0xff66ffb0);  // boson / mass-gate green
-  static const Color _well   = Color(0xffff5ca8);  // gravity-well magenta
-  static const Color _soln   = Color(0xff7fd8ff);  // solution-reveal cyan
+  static const Color _portal  = Color(0xff37e0d0);  // wormhole teal
+  static const Color _boson   = Color(0xff66ffb0);  // boson / mass-gate green
+  static const Color _well    = Color(0xffff5ca8);  // gravity-well magenta
+  static const Color _soln    = Color(0xff7fd8ff);  // solution-reveal cyan
+  static const Color _quantum = Color(0xffc9b8ff);  // entangled lavender
 
   _PuzzlePainter({
     required this.grid,
@@ -1043,6 +1072,8 @@ class _PuzzlePainter extends CustomPainter {
     required this.slingTo,
     required this.showSolution,
     required this.traceT,
+    required this.collapsedCell,
+    required this.measureT,
     required this.accent,
   });
 
@@ -1240,6 +1271,52 @@ class _PuzzlePainter extends CustomPainter {
         canvas.drawLine(tip - v * (cell * 0.18) + perp * (cell * 0.14), tip, ap);
         canvas.drawLine(tip - v * (cell * 0.18) - perp * (cell * 0.14), tip, ap);
       });
+    }
+
+    // ── Entangled pair ───────────────────────────────────────────────────────
+    // Two superposed twins flicker out of phase, joined by a shimmering thread,
+    // until one is measured; then its twin collapses to a fading void.
+    if (grid.hasQuantum) {
+      final a = center(grid.quantumCell), b = center(grid.ghostCell);
+      final collapsed = collapsedCell;
+      if (collapsed < 0) {
+        // Superposition: dashed thread + two out-of-phase ghosts.
+        final dash = Paint()
+          ..color = _quantum.withValues(alpha: 0.35 + pulseV * 0.25)
+          ..strokeWidth = 1.6;
+        const seg = 7.0;
+        final dir = (b - a); final len = dir.distance;
+        final unit = len == 0 ? Offset.zero : dir / len;
+        for (var d = 0.0; d < len; d += seg * 2) {
+          canvas.drawLine(a + unit * d, a + unit * (d + seg).clamp(0, len), dash);
+        }
+        for (final pair in [[a, pulseV], [b, 1 - pulseV]]) {
+          final p = pair[0] as Offset;
+          final ph = pair[1] as double;       // out-of-phase brightness
+          final rad = cell * 0.20;
+          canvas.drawCircle(p, rad * 1.8,
+            Paint()..color = _quantum.withValues(alpha: 0.10 + ph * 0.22));
+          canvas.drawCircle(p, rad,
+            Paint()..color = _quantum.withValues(alpha: 0.35 + ph * 0.5));
+          canvas.drawCircle(p, rad,
+            Paint()..color = _quantum.withValues(alpha: 0.6 + ph * 0.4)
+              ..style = PaintingStyle.stroke..strokeWidth = 1.6);
+        }
+      } else {
+        // The vanished twin: a quick implode (measureT) then a dim void.
+        final v = center(collapsed);
+        final t = measureT;
+        if (t > 0 && t < 1) {
+          canvas.drawCircle(v, cell * 0.4 * (1 - t),
+            Paint()..color = _quantum.withValues(alpha: (1 - t) * 0.6)
+              ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4));
+        }
+        canvas.drawRRect(
+          RRect.fromRectAndRadius(
+            Rect.fromCenter(center: v, width: cell * 0.7, height: cell * 0.7),
+            const Radius.circular(6)),
+          Paint()..color = const Color(0xff0c0a14));
+      }
     }
 
     // ── Worldline ──────────────────────────────────────────────────────────

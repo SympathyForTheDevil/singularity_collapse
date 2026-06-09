@@ -16,7 +16,9 @@ class GuideEntry {
 
 /// Persistence for "have I encountered this yet" flags.
 class GuideService {
-  static const keys = ['seen_core', 'seen_wormhole', 'seen_gate', 'seen_well'];
+  static const keys = [
+    'seen_core', 'seen_wormhole', 'seen_gate', 'seen_well', 'seen_entangled',
+  ];
 
   static Future<Set<String>> seen() async {
     final p = await SharedPreferences.getInstance();
@@ -59,6 +61,12 @@ const List<GuideEntry> kGuideEntries = [
     'Step onto it and your timeline is flung a fixed direction — no choice. Set '
     'up your approach so the launch lands where you need.',
     'seen_well', kGravityWellLevel),
+  GuideEntry('entangled', 'Entangled Pair',
+    'A cosmic object in superposition across two cells, joined by a quantum '
+    'thread. Measure one (trace into it) and its twin collapses to a void. '
+    'Exactly one collapse leaves the region fillable; the other strands you — '
+    'undo and try the twin.',
+    'seen_entangled', 13),
 ];
 
 /// The four first-encounter teaching cards (Core + the three mechanics).
@@ -79,6 +87,11 @@ const List<GuideEntry> kTutorialCards = [
     'Step on it and you\'re flung a fixed direction, no choice. Aim your '
     'approach so the launch lands where you need.',
     'seen_well', kGravityWellLevel),
+  GuideEntry('entangled', 'ENTANGLED PAIR',
+    'One object in two places. Measure one (trace into it) and its twin vanishes. '
+    'Only one choice keeps the region solvable — choose well, or undo and try '
+    'the other.',
+    'seen_entangled', 13),
 ];
 
 // ── Palette (mirrors the in-game motif colours) ─────────────────────────────
@@ -145,6 +158,17 @@ class _GuideIconPainter extends CustomPainter {
         final sp = Paint()..color = Colors.white ..strokeWidth = 2 ..strokeCap = StrokeCap.round;
         canvas.drawLine(c - Offset(u * 0.24, 0), c + Offset(u * 0.24, 0), sp);
         canvas.drawLine(c - Offset(0, u * 0.24), c + Offset(0, u * 0.24), sp);
+      case 'entangled':
+        const q = Color(0xffc9b8ff);
+        final dash = Paint()..color = q.withValues(alpha: 0.6)..strokeWidth = 1.4;
+        for (var x = u * 0.3; x < u * 0.7; x += 6) {
+          canvas.drawLine(Offset(x, c.dy), Offset((x + 3).clamp(0, u * 0.7), c.dy), dash);
+        }
+        for (final dx in [-u * 0.2, u * 0.2]) {
+          canvas.drawCircle(c + Offset(dx, 0), u * 0.13, Paint()..color = q.withValues(alpha: 0.5));
+          canvas.drawCircle(c + Offset(dx, 0), u * 0.13, Paint()
+            ..color = q ..style = PaintingStyle.stroke ..strokeWidth = 1.6);
+        }
       case 'well':
         canvas.drawCircle(c, u * 0.18, Paint()
           ..color = _well ..style = PaintingStyle.stroke ..strokeWidth = 2.5);

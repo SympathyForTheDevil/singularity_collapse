@@ -110,6 +110,39 @@ void main() {
     }
   });
 
+  test('entangled pair: right twin solvable, wrong twin parity-dead', () {
+    int colour(int c, int size) => ((c ~/ size) + (c % size)) % 2;
+    // Parity is necessary for a Hamiltonian path on a grid region from s to t.
+    bool parityOk(Set<int> cells, int s, int t, int size) {
+      var c0 = 0, c1 = 0;
+      for (final c in cells) {
+        if (colour(c, size) == 0) c0++; else c1++;
+      }
+      if (cells.length.isOdd) {
+        final maj = c0 > c1 ? 0 : 1;
+        return (c0 - c1).abs() == 1 &&
+            colour(s, size) == maj && colour(t, size) == maj;
+      }
+      return c0 == c1 && colour(s, size) != colour(t, size);
+    }
+    var placed = 0;
+    for (var s = 0; s < 40; s++) {
+      final g = PuzzleGrid.generate(8, rng: Random(s), force: {PuzzleFeature.entangled});
+      if (!g.hasQuantum) continue;
+      placed++;
+      final all = {for (var c = 0; c < g.cellCount; c++) c};
+      final start = g.solution.first, end = g.solution.last;
+      expect(g.solution.length, g.fillCount);            // covers all but the ghost
+      expect(g.solution.contains(g.quantumCell), isTrue);
+      expect(g.solution.contains(g.ghostCell), isFalse);
+      // Right branch (minus ghost) is the solution → parity holds.
+      expect(parityOk(all.difference({g.ghostCell}), start, end, g.size), isTrue);
+      // Wrong branch (minus the on-path twin) breaks parity → unsolvable.
+      expect(parityOk(all.difference({g.quantumCell}), start, end, g.size), isFalse);
+    }
+    expect(placed, greaterThan(0));
+  });
+
   test('forced features appear regardless of level', () {
     final g1 = PuzzleGrid.generate(2, force: {PuzzleFeature.wormhole});
     expect(g1.wormholes, isNotEmpty);

@@ -49,6 +49,20 @@ test/
 along it and only adds walls to edges the solution doesn't use. Every generated
 puzzle is always solvable — never touch the generation without re-running tests.
 
+**Entangled Pair (quantum, force-only prototype).** A cosmic object in
+superposition across two cells: `quantumCell` (ON the solution) and `ghostCell`
+(OFF it). The solution covers every cell *except* the ghost, so `fillCount =
+cellCount - 1`. Measuring one twin (tracing into it) collapses the other to a
+void; `_collapsedCell` derives this from the path (so it reverts on undo) and the
+collapsed cell is unsteppable. The two twins are **opposite checkerboard
+colours**, so removing the on-path twin instead breaks the start/end parity →
+that collapse is *provably* unsolvable. Right-choice deduction, solvable by
+construction (a probe + widget test confirm: right branch always valid, wrong
+branch always parity-dead). Win/black-hole checks use `grid.fillCount`, not
+`cellCount`. Currently `force`-only via the dev menu (`PuzzleFeature.entangled`);
+it's exclusive (reshapes the solution, so never combined with other mechanics).
+Field Guide entry unlock level (13) is a forward-looking placeholder.
+
 **Difficulty-authored generation.** Difficulty ≈ *branching*, not board size:
 fewer walls → more open → harder (more choices); more walls → more forced →
 easier. `PuzzleGrid.difficulty` (a `_branching` proxy: excess legal moves along
