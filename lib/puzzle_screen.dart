@@ -9,7 +9,7 @@ import 'field_guide.dart';
 import 'puzzle_model.dart';
 import 'theme_service.dart';
 
-enum PuzzleMode { daily, infinity, zen }
+enum PuzzleMode { daily, infinity, quantum }
 
 /// Singularity: Collapse — the standalone puzzle. Drag one worldline that
 /// consumes cosmic objects in ascending order and fills every cell; reaching
@@ -21,12 +21,20 @@ class PuzzleScreen extends StatefulWidget {
   final int? fixedLevel;
   /// Dev override: number of stacked boards when forcing multiverse (2 or 3).
   final int? multiverseBoards;
+  /// Quantum mode config: the mechanic types the player chose to see (drawn from
+  /// at random each board), whether to also include plain boards, and timed-or-not.
+  final Set<PuzzleFeature> quantumFeatures;
+  final bool quantumNormal;
+  final bool quantumTimed;
   const PuzzleScreen({
     super.key,
     this.mode = PuzzleMode.infinity,
     this.forceFeatures,
     this.fixedLevel,
     this.multiverseBoards,
+    this.quantumFeatures = const {},
+    this.quantumNormal = true,
+    this.quantumTimed = false,
   });
   @override
   State<PuzzleScreen> createState() => _PuzzleScreenState();
@@ -140,8 +148,11 @@ class _PuzzleScreenState extends State<PuzzleScreen>
 
   static const Color _accent = Color(0xffffc24d);
 
-  bool get _isDaily => widget.mode == PuzzleMode.daily;
-  bool get _isZen   => widget.mode == PuzzleMode.zen;
+  bool get _isDaily   => widget.mode == PuzzleMode.daily;
+  bool get _isQuantum => widget.mode == PuzzleMode.quantum;
+  /// Whether the timer is shown/relevant: always in Daily/Infinity; in Quantum
+  /// only when the player chose a timed session.
+  bool get _timed => !_isQuantum || widget.quantumTimed;
 
   @override
   void initState() {
@@ -179,7 +190,7 @@ class _PuzzleScreenState extends State<PuzzleScreen>
       });
     _newPuzzle();
     _loadSeen();
-    AudioService.instance.startAmbient(calm: _isZen);
+    AudioService.instance.startAmbient(calm: !_timed);
   }
 
   Future<void> _loadSeen() async {
@@ -256,8 +267,22 @@ class _PuzzleScreenState extends State<PuzzleScreen>
     if (!_isDaily && advance) { level++; solvedCount++; }
     final rng = _isDaily ? Random(DailyService.todaySeed()) : null;  // null → fresh random each puzzle
     final lvl = widget.fixedLevel ?? (_isDaily ? DailyService.dailyLevel() : level);
-    grid = PuzzleGrid.generate(lvl, rng: rng, force: widget.forceFeatures,
-        multiverseBoards: widget.multiverseBoards);
+
+    // Quantum mode: each board is a random pick from the player's chosen types
+    // (an empty force-set = a plain board). Exclusive mechanics come alone; the
+    // others are forced one at a time. Level still drives difficulty.
+    var force = widget.forceFeatures;
+    int? mvBoards = widget.multiverseBoards;
+    if (_isQuantum) {
+      final choices = <Set<PuzzleFeature>>[
+        if (widget.quantumNormal) <PuzzleFeature>{},
+        for (final f in widget.quantumFeatures) {f},
+      ];
+      force = (choices.isEmpty ? <PuzzleFeature>{} : choices[Random().nextInt(choices.length)]);
+      if (force.contains(PuzzleFeature.multiverse)) mvBoards = Random().nextBool() ? 3 : 2;
+    }
+
+    grid = PuzzleGrid.generate(lvl, rng: rng, force: force, multiverseBoards: mvBoards);
     path
       ..clear()
       ..add(grid.startCell);
@@ -642,7 +667,7 @@ class _PuzzleScreenState extends State<PuzzleScreen>
     if (_paused) {
       AudioService.instance.stopAmbient();
     } else {
-      AudioService.instance.startAmbient(calm: _isZen);
+      AudioService.instance.startAmbient(calm: !_timed);
     }
   }
 
@@ -679,7 +704,7 @@ class _PuzzleScreenState extends State<PuzzleScreen>
     final buf     = StringBuffer()
       ..writeln('Singularity: Collapse')
       ..writeln('Daily Region $today ✅');
-    if (!_isZen) buf.writeln('Time: ${_formatTime(_seconds)}');
+    if (_timed) buf.writeln('Time: ${_formatTime(_seconds)}');
     if (_streak > 0) buf.writeln('Streak 🔥 $_streak');
     buf.writeln();
     for (var r = 0; r < grid.size; r++) {
@@ -741,7 +766,7 @@ class _PuzzleScreenState extends State<PuzzleScreen>
                               fit: BoxFit.scaleDown,
                               child: Text(
                                 _isDaily ? 'DAILY  ·  $dateStr'
-                                  : _isZen ? 'ZEN  ·  STAGE $level'
+                                  : _isQuantum ? 'QUANTUM  ·  STAGE $level'
                                   : 'COLLAPSE  ·  STAGE $level',
                                 style: const TextStyle(
                                   color: _accent, fontSize: 18,
@@ -789,7 +814,7 @@ class _PuzzleScreenState extends State<PuzzleScreen>
                         style: const TextStyle(
                           color: Color(0xff8aa6bc), fontSize: 12,
                           fontFamily: 'monospace', letterSpacing: 2)),
-                      if (!_isZen) ...[
+                      if (_timed) ...[
                         const SizedBox(height: 12),
                         Text(
                           _formatTime(_seconds),
@@ -1006,7 +1031,7 @@ class _PuzzleScreenState extends State<PuzzleScreen>
                 color: Colors.white, fontSize: 26, fontFamily: 'monospace',
                 fontWeight: FontWeight.bold, letterSpacing: 6,
                 shadows: [Shadow(color: Color(0xffbb55ff), blurRadius: 20)])),
-            if (!_isZen) ...[
+            if (_timed) ...[
               const SizedBox(height: 8),
               Text(_formatTime(_seconds),
                 style: const TextStyle(
@@ -1041,7 +1066,7 @@ class _PuzzleScreenState extends State<PuzzleScreen>
                 fontWeight: FontWeight.bold, letterSpacing: 4,
                 shadows: [Shadow(color: Color(0xffbb55ff), blurRadius: 20)])),
 
-            if (!_isZen && _seconds > 0) ...[
+            if (_timed && _seconds > 0) ...[
               const SizedBox(height: 6),
               Text(_formatTime(_seconds),
                 style: const TextStyle(

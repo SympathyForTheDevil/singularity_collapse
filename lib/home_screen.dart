@@ -5,6 +5,7 @@ import 'daily_service.dart';
 import 'field_guide.dart';
 import 'puzzle_model.dart';
 import 'puzzle_screen.dart';
+import 'quantum_setup.dart';
 import 'theme_service.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -62,10 +63,10 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       builder: (_) => const PuzzleScreen(mode: PuzzleMode.infinity)));
   }
 
-  void _goZen() {
+  void _goQuantum() {
     AudioService.instance.ui();
     Navigator.push(context, MaterialPageRoute(
-      builder: (_) => const PuzzleScreen(mode: PuzzleMode.zen)));
+      builder: (_) => const QuantumSetupScreen()));
   }
 
   Future<void> _toggleMute() async {
@@ -226,10 +227,10 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                       onTap: _goInfinity),
                     const SizedBox(height: 14),
 
-                    // Zen button
-                    _menuBtn('ZEN MODE',
-                      color: _cyan,
-                      onTap: _goZen),
+                    // Quantum button (tailor-your-session: pick types + timed)
+                    _menuBtn('QUANTUM MODE',
+                      color: _purple,
+                      onTap: _goQuantum),
                   ],
                 ),
               ),

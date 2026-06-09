@@ -37,6 +37,8 @@ lib/
   puzzle_model.dart  PuzzleGrid: guaranteed-solvable generation + all rules
   puzzle_screen.dart PuzzleScreen StatefulWidget + _PuzzlePainter CustomPainter
   theme_service.dart Persisted cosmetic board themes (Penrose 45° skin)
+  quantum_setup.dart QuantumSetupScreen — tailor-your-session picker (types + timed)
+  quantum_service.dart Persisted Quantum-mode config (chosen types, normal, timed)
 test/
   widget_test.dart   Engine unit tests (solvability, endpoint pinning, wall rules)
 ```
@@ -138,6 +140,22 @@ Persisted like mute (`ThemeService.penrose`, key `penrose_theme`), loaded in
 mute). Forward-looking: this is the hook an **unlockable perk** (via play or
 monetization, TBD) would gate — flip `ThemeService.setPenrose` from wherever the
 unlock lands.
+
+**Quantum Mode (`lib/quantum_setup.dart`, `lib/quantum_service.dart`).** The old Zen mode
+(`PuzzleMode.zen`) is now **Quantum Mode** (`PuzzleMode.quantum`) — a *tailor-your-session*
+mode. A setup screen (`QuantumSetupScreen`, reached from the home "QUANTUM MODE" button)
+lets the player choose **which game types appear** (Normal + the five mechanics) and
+whether the run is **TIMED or RELAXED**. Only **unlocked** types are selectable — locked
+ones are greyed with "UNLOCK AT LEVEL X" (uses the same `GuideService` `seen_*` flags as
+the Field Guide, so the unlock loop drives players back into Infinity/Daily). Each Quantum
+board is a random pick from the chosen set (`PuzzleScreen._newPuzzle`: builds a per-board
+`force` set — an empty set = a plain board; exclusive mechanics come alone; multiverse gets
+a random 2/3 boards). Level still advances for difficulty; `_timed` (`!_isQuantum ||
+quantumTimed`) gates the timer display + ambient calm + share-card time. Config persists via
+`QuantumService` (`quantum_features`/`quantum_normal`/`quantum_timed`), loaded in `main()`.
+First open pre-selects all unlocked types. **Premium hook:** the picker is the natural
+paywall surface — gate entry to `QuantumSetupScreen` behind a purchase flag when
+monetization lands (no gate yet).
 
 **Portrait only.** Locked in `main.dart`. Do not add landscape.
 

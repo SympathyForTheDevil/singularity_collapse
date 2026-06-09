@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'audio.dart';
 import 'home_screen.dart';
+import 'quantum_service.dart';
 import 'theme_service.dart';
 
 void main() async {
@@ -9,6 +10,7 @@ void main() async {
   SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
   SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
   await ThemeService.load();      // resolve the board theme before first paint
+  await QuantumService.load();    // remember the Quantum-mode picker config
   AudioService.instance.init();   // fire-and-forget; fails silently if unavailable
   runApp(const CollapseApp());
 }
