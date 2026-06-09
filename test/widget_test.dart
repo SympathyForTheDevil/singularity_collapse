@@ -143,6 +143,64 @@ void main() {
     expect(placed, greaterThan(0));
   });
 
+  test('multiverse: two boards woven by one-way + two-way bridges, solvable', () {
+    for (var seed = 0; seed < 40; seed++) {
+      final g = PuzzleGrid.generate(
+        12, rng: Random(seed), force: {PuzzleFeature.multiverse});
+      final na = g.size * g.size;
+
+      // Two boards; the solution covers every cell of both exactly once.
+      expect(g.boardCount, 2);
+      expect(g.cellCount, 2 * na);
+      expect(g.solution.length, g.cellCount);
+      expect(g.solution.toSet().length, g.cellCount);
+      expect(g.solution.map(g.boardOf).toSet(), {0, 1});   // genuinely visits both
+
+      // Every consecutive step is linked; same-board steps are grid-adjacent and
+      // wall-free; cross-board steps are exactly valid bridge initiations.
+      var bridgeSteps = 0;
+      for (var i = 0; i + 1 < g.solution.length; i++) {
+        final a = g.solution[i], b = g.solution[i + 1];
+        expect(g.linked(a, b), isTrue, reason: 'step $i unlinked (seed $seed)');
+        if (g.adjacent(a, b)) {
+          expect(g.hasWall(a, b), isFalse);
+        } else {
+          // A non-adjacent step must be a legal bridge crossing from a's mouth.
+          expect(g.bridgeExitFrom(a), b, reason: 'step $i illegal bridge (seed $seed)');
+          bridgeSteps++;
+        }
+      }
+      // A there-and-back weave: at least two crossings.
+      expect(bridgeSteps, greaterThanOrEqualTo(2));
+
+      // The mix: at least one one-way and one two-way bridge.
+      expect(g.bridges.any((br) => br.oneWay),  isTrue);
+      expect(g.bridges.any((br) => !br.oneWay), isTrue);
+      // One-way exit mouths are arrival-only (can't be entered by a normal step).
+      for (final br in g.bridges) {
+        if (br.oneWay) expect(g.isBridgeEntryBlocked(br.b), isTrue);
+      }
+
+      // Milestone 1 at the start, Black Hole at the final cell, ordered between.
+      expect(g.startCell, g.solution.first);
+      expect(g.blackHoleCell, g.solution.last);
+      var seen = 0;
+      for (final c in g.solution) {
+        final m = g.milestones[c];
+        if (m != null) { expect(m, seen + 1); seen++; }
+      }
+      expect(seen, g.milestoneCount);
+    }
+  });
+
+  test('multiverse is gated to force-only (never auto-spawns)', () {
+    for (var level = 1; level <= 20; level++) {
+      for (var s = 0; s < 10; s++) {
+        expect(PuzzleGrid.generate(level, rng: Random(s)).boardCount, 1);
+      }
+    }
+  });
+
   test('forced features appear regardless of level', () {
     final g1 = PuzzleGrid.generate(2, force: {PuzzleFeature.wormhole});
     expect(g1.wormholes, isNotEmpty);

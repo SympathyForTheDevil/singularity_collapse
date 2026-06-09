@@ -297,6 +297,24 @@ All four additive mechanics are implemented and dev-menu testable:
 | Gravity wells | ≥ 10 | `PuzzleFeature.gravityWell` | ✅ shipped |
 | Entangled pair | ≥ 13 (placeholder) | `PuzzleFeature.entangled` | ✅ shipped (force-only prototype) |
 
+**Multiverse (stacked boards + bridges)** — in progress. **Phase 1 (engine) shipped:**
+`PuzzleFeature.multiverse` (force-only, exclusive; `kMultiverseLevel`=16 placeholder)
+generates **two stacked square boards** (5×5) woven by one continuous worldline that
+crosses **bridges** between them. `PuzzleGrid` is now N-board-general: cell index =
+`board*size² + local`; `boardOf/rowOf/colOf` are board-aware, `adjacent` requires the
+same board, `cellCount = size²·boardCount`. A `Bridge(a, b, oneWay)` is a cross-board
+teleport — `oneWay` true = Einstein–Rosen (enter black mouth `a`, eject white mouth
+`b`, no return; `b` is entry-blocked via `isBridgeEntryBlocked`), false = a traversable
+wormhole crossable either way (`bridgeExitFrom` honours direction). Generation
+(`_generateMultiverse`) is **cut-and-interleave**: Hamiltonian-cover each board, splice
+as A₁→bridge→B→bridge→A₂ → one path covering all 2N cells with exactly two cross-board
+jumps, guaranteed ≥1 one-way + ≥1 two-way (a there-and-back weave) → solvable by
+construction. Walls are per-board on unused in-board edges. Two widget tests assert it.
+**Remaining: Phase 2** = stacked simultaneous render + bridge visuals (distinct from the
+finish black hole) + input routing + dev-menu entry; **Phase 3** = 3-board / rectangular
+boards, difficulty sweep, tutorial/field-guide, audio. No rendering/input yet — inert
+until Phase 2.
+
 **Hunter mechanic** — shelved. Proven incompatible with fill-every-cell: on every
 Hamiltonian path the player must eventually visit the hunter's cell, making a
 "safe" route impossible regardless of hunter period. Viable only as a separate

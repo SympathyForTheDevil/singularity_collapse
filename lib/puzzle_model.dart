@@ -14,13 +14,26 @@ import 'dart:math';
 /// solution doesn't use. → infinite, always-solvable puzzles.
 /// Special mechanics that can be woven into the core puzzle. Each unlocks at a
 /// skill-gate level (below), or can be forced on for testing via the dev menu.
-enum PuzzleFeature { wormhole, massGate, gravityWell, entangled }
+enum PuzzleFeature { wormhole, massGate, gravityWell, entangled, multiverse }
 
 /// Levels below these never spawn the feature — they unlock as skill gates so
 /// players meet them only after the basic trace is second nature.
 const int kWormholeLevel    = 4;
 const int kMassGateLevel    = 7;
 const int kGravityWellLevel = 10;
+const int kMultiverseLevel  = 16;   // placeholder skill-gate (force-only MVP)
+
+/// A cross-board teleport link between two boards of a [multiverse] puzzle —
+/// an Einstein–Rosen / wormhole bridge. [oneWay] true → only [a]→[b] may be
+/// initiated (a black-hole mouth feeding a white-hole exit; the exit can't be
+/// entered normally). false → a *traversable* wormhole the worldline may cross
+/// either way. The mechanic is built on mixing both kinds on one puzzle.
+class Bridge {
+  final int  a;        // initiating mouth (global cell index)
+  final int  b;        // exit mouth      (global cell index, on another board)
+  final bool oneWay;
+  const Bridge(this.a, this.b, this.oneWay);
+}
 
 class PuzzleGrid {
   final int size;                 // square board: size × size
@@ -33,6 +46,8 @@ class PuzzleGrid {
   final Map<int, int> wells;      // cell -> direction delta (gravity-well launch)
   final int quantumCell;          // entangled twin ON the solution (-1 if none)
   final int ghostCell;            // entangled twin OFF the solution (vanishes)
+  final int boardCount;           // stacked boards (1 = normal; >1 = multiverse)
+  final List<Bridge> bridges;     // cross-board teleport links (multiverse)
 
   /// How many cells a gravity well flings you (in addition to the well cell).
   static const int wellRange = 2;
@@ -48,6 +63,8 @@ class PuzzleGrid {
     this.wells = const {},
     this.quantumCell = -1,
     this.ghostCell = -1,
+    this.boardCount = 1,
+    this.bridges = const [],
   });
 
   /// Launch direction delta for the well on [cell], or null.
@@ -71,14 +88,55 @@ class PuzzleGrid {
   /// Key id of the boson on [cell], or null.
   int? keyIdAt(int cell)        => keys[cell];
 
-  /// Two cells are linked if they're grid-adjacent or a wormhole pair.
-  bool linked(int a, int b) => adjacent(a, b) || wormholes[a] == b;
+  /// Two cells are linked if grid-adjacent, a wormhole pair, or a bridge pair.
+  bool linked(int a, int b) {
+    if (adjacent(a, b) || wormholes[a] == b) return true;
+    for (final br in bridges) {
+      if ((br.a == a && br.b == b) || (br.a == b && br.b == a)) return true;
+    }
+    return false;
+  }
 
-  int get cellCount      => size * size;
+  /// If stepping onto [cell] initiates a bridge crossing, the exit cell; else
+  /// null. A one-way bridge can only be initiated from its [Bridge.a] mouth.
+  int? bridgeExitFrom(int cell) {
+    for (final br in bridges) {
+      if (br.a == cell) return br.b;
+      if (br.b == cell && !br.oneWay) return br.a;
+    }
+    return null;
+  }
+
+  /// A one-way bridge's exit mouth can't be entered by a normal step (a white
+  /// hole: arrival-only); it is filled solely by the crossing that lands on it.
+  bool isBridgeEntryBlocked(int cell) {
+    for (final br in bridges) {
+      if (br.oneWay && br.b == cell) return true;
+    }
+    return false;
+  }
+
+  bool get hasMultiverse => boardCount > 1;
+
+  int get cellCount      => size * size * boardCount;
   int get milestoneCount => milestones.length;
 
-  int rowOf(int i) => i ~/ size;
-  int colOf(int i) => i % size;
+  int get _na => size * size;             // cells per board
+  int boardOf(int i) => i ~/ _na;
+  int rowOf(int i) => (i % _na) ~/ size;
+  int colOf(int i) => (i % _na) % size;
+
+  /// In-board grid neighbours of [cell] as global indices (never crosses boards).
+  List<int> _neighG(int cell) {
+    final base = boardOf(cell) * _na, li = cell % _na;
+    final r = li ~/ size, c = li % size;
+    final o = <int>[];
+    if (r > 0)        o.add(base + li - size);
+    if (r < size - 1) o.add(base + li + size);
+    if (c > 0)        o.add(base + li - 1);
+    if (c < size - 1) o.add(base + li + 1);
+    return o;
+  }
 
   /// Cell holding milestone #1 (Particle) — where the worldline must begin.
   int get startCell => milestones.entries.firstWhere((e) => e.value == 1).key;
@@ -97,7 +155,37 @@ class PuzzleGrid {
   /// step, how many legal moves the player faced beyond the single correct one.
   /// 0 = fully forced (trivial); higher = more choices to reason through. More
   /// walls lower it; an open board raises it.
-  int get difficulty => _branching(solution, milestones, walls, size);
+  int get difficulty => boardCount == 1
+      ? _branching(solution, milestones, walls, size)
+      : _branchingMulti();
+
+  /// Board-aware branching for multiverse boards: in-board legal moves at each
+  /// step, plus any available bridge crossing (a non-local extra option).
+  int _branchingMulti() {
+    final cc = cellCount;
+    final visited = List<bool>.filled(cc, false);
+    var msSeen = 0, branch = 0;
+    for (var i = 0; i + 1 < solution.length; i++) {
+      final head = solution[i];
+      visited[head] = true;
+      if (milestones.containsKey(head)) msSeen++;
+      var opts = 0;
+      for (final nb in _neighG(head)) {
+        if (visited[nb]) continue;
+        if (walls.contains(edgeKey(head, nb, cc))) continue;
+        final m = milestones[nb];
+        if (m != null) {
+          if (m != msSeen + 1) continue;
+          if (m == milestoneCount && i + 1 != solution.length - 1) continue;
+        }
+        opts++;
+      }
+      final bx = bridgeExitFrom(head);
+      if (bx != null && !visited[bx]) opts++;
+      if (opts > 1) branch += opts - 1;
+    }
+    return branch;
+  }
 
   static int _branching(List<int> sol, Map<int, int> ms, Set<int> walls, int size) {
     final n  = size * size;
@@ -127,6 +215,7 @@ class PuzzleGrid {
   bool hasWall(int a, int b) => walls.contains(edgeKey(a, b, cellCount));
 
   bool adjacent(int a, int b) {
+    if (boardOf(a) != boardOf(b)) return false;   // different boards never touch
     final dr = (rowOf(a) - rowOf(b)).abs();
     final dc = (colOf(a) - colOf(b)).abs();
     return dr + dc == 1;
@@ -138,6 +227,13 @@ class PuzzleGrid {
   /// features unlock by [level]. Used by the dev menu to test a given mechanic.
   static PuzzleGrid generate(int level, {Random? rng, Set<PuzzleFeature>? force}) {
     final r    = rng ?? Random();
+
+    // Multiverse reshapes the board into stacked sheets, so it's its own path
+    // (force-only MVP, exclusive — never combined with the single-board mechanics).
+    if (force?.contains(PuzzleFeature.multiverse) ?? false) {
+      return _generateMultiverse(level, r);
+    }
+
     final size = (5 + level ~/ 3).clamp(5, 8);
     final n    = size * size;
 
@@ -311,6 +407,95 @@ class PuzzleGrid {
       size: size, solution: sol, milestones: ms, walls: walls,
       wormholes: wormholes, gates: gates, keys: keys, wells: wells,
       quantumCell: quantumCell, ghostCell: ghostCell);
+  }
+
+  /// Multiverse board (force-only MVP): two stacked square boards woven by one
+  /// continuous worldline that crosses bridges between them.
+  ///
+  /// Construction is "cut-and-interleave": cover board A and board B each with a
+  /// Hamiltonian path, then splice them as A₁ → (bridge) → B → (bridge) → A₂, so
+  /// the single path covers every cell of both boards with all in-board steps
+  /// grid-adjacent and exactly two cross-board jumps → always solvable by
+  /// construction. One bridge is one-way (Einstein–Rosen: enter the black mouth,
+  /// eject the white, no return), the other two-way (a traversable wormhole) —
+  /// guaranteeing the mix the mechanic is built around, and a there-and-back weave.
+  static PuzzleGrid _generateMultiverse(int level, Random r) {
+    const size  = 5;
+    const na    = size * size;        // cells per board
+    const total = 2 * na;             // cellCount
+
+    final a      = _hamiltonian(size, r) ?? _snake(size);        // board 0 (local)
+    final bLocal = _hamiltonian(size, r) ?? _snake(size);        // board 1 (local)
+    final b      = bLocal.map((c) => c + na).toList();           // board 1 (global)
+
+    // Cut board A so the worldline leaves after A₁, fills B, returns for A₂.
+    // i in [1, na-3] keeps the global start (a[0]) and finish (a[na-1]) off the
+    // four bridge mouths.
+    final i = 1 + r.nextInt(na - 3);
+
+    final sol = <int>[
+      ...a.sublist(0, i + 1),   // A₁ = a[0..i]      (ends at mouth a[i])
+      ...b,                     // B  = b[0..na-1]   (land a[i]→b[0]; leave at b[na-1])
+      ...a.sublist(i + 1),      // A₂ = a[i+1..na-1] (land b[na-1]→a[i+1]; end at finish)
+    ];
+
+    // Two bridges; exactly one one-way and one two-way (the mix, guaranteed).
+    final firstOneWay = r.nextBool();
+    final bridges = <Bridge>[
+      Bridge(a[i],      b[0],      firstOneWay),    // A → B  (after A₁)
+      Bridge(b[na - 1], a[i + 1], !firstOneWay),    // B → A  (after B)
+    ];
+
+    // Milestones: #1 at the global start, Black Hole at the global end, the rest
+    // spread across both boards — never on a bridge mouth.
+    final mouthPos = {i, i + 1, i + na, i + na + 1};   // mouth positions in sol
+    final slen = sol.length;                            // == total
+    final k = (4 + level ~/ 2).clamp(4, 7);
+    final idxSet = <int>{0, slen - 1};
+    var guard = 0;
+    while (idxSet.length < k && guard++ < 4000) {
+      final p = 1 + r.nextInt(slen - 2);
+      if (!mouthPos.contains(p)) idxSet.add(p);
+    }
+    final idx = idxSet.toList()..sort();
+    final ms = <int, int>{};
+    for (var m = 0; m < idx.length; m++) {
+      ms[sol[idx[m]]] = m + 1;
+    }
+
+    // Walls only on in-board edges the solution doesn't use (per board), so the
+    // solution stays wall-free → solvable. Bridges aren't grid edges. Moderate
+    // fixed density for the MVP (difficulty-authored sweep is a later pass).
+    bool adjG(int x, int y) {
+      if (x ~/ na != y ~/ na) return false;
+      final lx = x % na, ly = y % na;
+      return ((lx ~/ size) - (ly ~/ size)).abs() +
+             ((lx %  size) - (ly %  size)).abs() == 1;
+    }
+    final solEdges = <int>{};
+    for (var s = 0; s + 1 < sol.length; s++) {
+      if (adjG(sol[s], sol[s + 1])) solEdges.add(edgeKey(sol[s], sol[s + 1], total));
+    }
+    const density = 0.18;
+    final walls = <int>{};
+    for (var board = 0; board < 2; board++) {
+      final base = board * na;
+      for (var c = 0; c < na; c++) {
+        final rr = c ~/ size, ccol = c % size, gc = base + c;
+        if (ccol < size - 1) {
+          final key = edgeKey(gc, gc + 1, total);
+          if (!solEdges.contains(key) && r.nextDouble() < density) walls.add(key);
+        }
+        if (rr < size - 1) {
+          final key = edgeKey(gc, gc + size, total);
+          if (!solEdges.contains(key) && r.nextDouble() < density) walls.add(key);
+        }
+      }
+    }
+
+    return PuzzleGrid(
+      size: size, boardCount: 2, solution: sol, milestones: ms, walls: walls,
+      bridges: bridges);
   }
 
   /// Target branching-difficulty for a level — a smooth ramp. Best-of-N walls
