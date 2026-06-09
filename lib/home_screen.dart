@@ -5,6 +5,7 @@ import 'daily_service.dart';
 import 'field_guide.dart';
 import 'puzzle_model.dart';
 import 'puzzle_screen.dart';
+import 'theme_service.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -17,6 +18,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   int  _streak      = 0;
   bool _loaded      = false;
   bool _muted       = AudioService.instance.muted;
+  bool _penrose     = ThemeService.penrose;
   bool _showDev     = false;
 
   late final AnimationController _pulse;
@@ -72,6 +74,12 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     AudioService.instance.ui();   // audible only when now un-muted — a confirm
   }
 
+  Future<void> _togglePenrose() async {
+    AudioService.instance.ui();
+    await ThemeService.setPenrose(!_penrose);
+    if (mounted) setState(() => _penrose = ThemeService.penrose);
+  }
+
   @override
   Widget build(BuildContext context) {
     final today = DailyService.todayStr();
@@ -98,6 +106,30 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                   ),
                   child: const Icon(Icons.menu_book_rounded,
                     color: Color(0xff7799aa), size: 20),
+                ),
+              ),
+            ),
+            // ── Penrose / spacetime board-skin toggle (top-right) ───────────
+            Positioned(
+              top: 8, right: 60,
+              child: GestureDetector(
+                onTap: _togglePenrose,
+                child: Container(
+                  width: 40, height: 40,
+                  decoration: BoxDecoration(
+                    color: const Color(0xff0a1018),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: _penrose ? _purple : const Color(0xff223344),
+                      width: 1),
+                  ),
+                  // A tilted square = the 45° diamond board it produces.
+                  child: Transform.rotate(
+                    angle: pi / 4,
+                    child: Icon(Icons.crop_square_rounded,
+                      color: _penrose ? _purple : const Color(0xff35485a),
+                      size: 18),
+                  ),
                 ),
               ),
             ),

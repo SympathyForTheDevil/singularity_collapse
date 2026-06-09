@@ -36,6 +36,7 @@ lib/
   cosmic.dart        CosmicTier data class, kLowerTiers, kBlackHole, tierFor()
   puzzle_model.dart  PuzzleGrid: guaranteed-solvable generation + all rules
   puzzle_screen.dart PuzzleScreen StatefulWidget + _PuzzlePainter CustomPainter
+  theme_service.dart Persisted cosmetic board themes (Penrose 45° skin)
 test/
   widget_test.dart   Engine unit tests (solvability, endpoint pinning, wall rules)
 ```
@@ -114,6 +115,28 @@ listed, but un-encountered entries are blacked out showing "UNLOCKS AT LEVEL X"
 (+ `kTutorialCards` if it deserves a card) and add a motif to `_GuideIconPainter`.
 The old transient "NEW · …" hint intros were replaced by these cards; `_showHint`
 is now only for in-context nudges (blocked moves).
+
+**Board themes — Penrose skin (`lib/theme_service.dart`).** A cosmetic toggle
+that tilts the whole board **+45° into a diamond** (scaled `1/√2` to stay
+inscribed in its box), so the axis-aligned grid becomes a lattice of **45° light
+cones** and the worldline reads as a null-ray path — a Penrose/spacetime diagram
+crunching toward the singularity. Purely visual: generation, rules, and
+solvability are untouched (all 7 tests still pass). Implementation is two-sided
+and must stay in sync:
+- **Render:** `_PuzzlePainter` wraps *only the board content* in a
+  rotate(π/4)+scale(1/√2) about board centre (nested inside the collapse
+  transform); the HUD and the collapse celebration draw in screen space and stay
+  upright. The collapse implosion + celebration pivot on the **rotated** black-hole
+  position (`pivot`), not the raw cell centre, or the region crunches to the wrong
+  spot.
+- **Input:** `_boardLocal` inverse-transforms every gesture point (un-rotate −π/4,
+  un-scale ×√2) before hit-testing, so taps land on the cell you *see*. Touches in
+  the diamond's outer corners map outside the grid → ignored.
+Persisted like mute (`ThemeService.penrose`, key `penrose_theme`), loaded in
+`main()`, toggled by the diamond icon on the home screen (top-right, left of
+mute). Forward-looking: this is the hook an **unlockable perk** (via play or
+monetization, TBD) would gate — flip `ThemeService.setPenrose` from wherever the
+unlock lands.
 
 **Portrait only.** Locked in `main.dart`. Do not add landscape.
 

@@ -7,6 +7,7 @@ import 'cosmic.dart';
 import 'daily_service.dart';
 import 'field_guide.dart';
 import 'puzzle_model.dart';
+import 'theme_service.dart';
 
 enum PuzzleMode { daily, infinity, zen }
 
@@ -38,6 +39,7 @@ class _PuzzleScreenState extends State<PuzzleScreen>
   bool _showShare  = false;
   bool _paused     = false;
   bool _muted      = AudioService.instance.muted;
+  final bool _penrose = ThemeService.penrose;  // 45° spacetime-diagram board skin
   int  _streak     = 0;
 
   // Timer
@@ -399,6 +401,20 @@ class _PuzzleScreenState extends State<PuzzleScreen>
     _showHint('GATE · GRAB THE BOSON FIRST');
   }
 
+  /// Map a raw gesture point (box space) into board space. In the Penrose skin
+  /// the board is painted rotated +45° and scaled 1/√2 about its centre, so input
+  /// must be inverse-transformed (un-rotate −45°, un-scale ×√2) before hit-testing
+  /// — otherwise the cell you touch wouldn't match the cell you see.
+  Offset _boardLocal(Offset p) {
+    if (!_penrose) return p;
+    final c = _boardSize / 2;
+    final v = p - Offset(c, c);
+    const a = -pi / 4;
+    final ca = cos(a), sa = sin(a);
+    final r = Offset(v.dx * ca - v.dy * sa, v.dx * sa + v.dy * ca) * sqrt2;
+    return r + Offset(c, c);
+  }
+
   int? _cellAt(Offset p) {
     final cs = _boardSize / grid.size;
     if (p.dx < 0 || p.dy < 0 || p.dx >= _boardSize || p.dy >= _boardSize) {
@@ -425,6 +441,7 @@ class _PuzzleScreenState extends State<PuzzleScreen>
 
   void _onPan(Offset local) {
     if (solved || _paused || _cards.isNotEmpty) return;
+    local = _boardLocal(local);
     final cell = _cellAt(local);
     if (cell == null || cell == path.last) return;
 
@@ -517,6 +534,7 @@ class _PuzzleScreenState extends State<PuzzleScreen>
   /// Tap a visited cell to rewind the worldline to it. Tapping elsewhere does nothing.
   void _onTap(Offset local) {
     if (solved || _paused || _cards.isNotEmpty) return;
+    local = _boardLocal(local);
     final cell = _cellAt(local);
     if (cell == null) return;
     if (path.contains(cell)) _truncateTo(cell);
@@ -749,6 +767,7 @@ class _PuzzleScreenState extends State<PuzzleScreen>
                                 collapsedCell: _collapsedCell,
                                 measureT: _measure.value,
                                 accent: _accent,
+                                penrose: _penrose,
                               ),
                             ),
                           ),
@@ -1051,6 +1070,7 @@ class _PuzzlePainter extends CustomPainter {
   final int        collapsedCell; // entangled twin that vanished (-1 none)
   final double     measureT;  // 0 → 1 entangled collapse flash
   final Color      accent;
+  final bool       penrose;   // tilt the board 45° (spacetime-diagram skin)
 
   static const Color _portal  = Color(0xff37e0d0);  // wormhole teal
   static const Color _boson   = Color(0xff66ffb0);  // boson / mass-gate green
@@ -1075,6 +1095,7 @@ class _PuzzlePainter extends CustomPainter {
     required this.collapsedCell,
     required this.measureT,
     required this.accent,
+    required this.penrose,
   });
 
   // ── Collapse timeline ─────────────────────────────────────────────────────
@@ -1102,6 +1123,19 @@ class _PuzzlePainter extends CustomPainter {
     final bounds   = Offset.zero & size;
     final bhCenter = center(grid.blackHoleCell);
 
+    // Where the black hole actually appears on screen. In the Penrose skin the
+    // board is rotated, so its visible position is the forward-transformed
+    // bhCenter — the implosion and the collapse celebration must pivot there, not
+    // on the un-rotated cell centre, or the region would crunch to the wrong spot.
+    Offset pivot = bhCenter;
+    if (penrose) {
+      final c = size.center(Offset.zero);
+      final v = (bhCenter - c) / sqrt2;
+      const a = pi / 4;
+      pivot = Offset(v.dx * cos(a) - v.dy * sin(a),
+                     v.dx * sin(a) + v.dy * cos(a)) + c;
+    }
+
     // During the collapse: reveal a starfield behind the board, then scale all
     // board content down toward the black hole (the region implodes into a
     // single point of a wider galaxy). A fade layer dissolves the old region.
@@ -1111,14 +1145,30 @@ class _PuzzlePainter extends CustomPainter {
       _drawStarfield(canvas, size, ((solveT - 0.4) / 0.3).clamp(0.0, 1.0));
       final s = _collapseScale(solveT);
       canvas.save();
-      canvas.translate(bhCenter.dx, bhCenter.dy);
+      canvas.translate(pivot.dx, pivot.dy);
       canvas.scale(s);
-      canvas.translate(-bhCenter.dx, -bhCenter.dy);
+      canvas.translate(-pivot.dx, -pivot.dy);
     }
     final fadeLayer = collapsing && contentAlpha < 0.99;
     if (fadeLayer) {
       canvas.saveLayer(bounds,
         Paint()..color = Colors.white.withValues(alpha: contentAlpha));
+    }
+
+    // ── Penrose / spacetime skin ──────────────────────────────────────────────
+    // Tilt the whole board +45° (scaled 1/√2 to stay inscribed in its box) so the
+    // axis-aligned grid becomes a lattice of 45° light cones and the worldline
+    // reads as a null-ray path — a Penrose diagram crunching toward the
+    // singularity. Wraps only the board content; the HUD and the collapse
+    // celebration (drawn in screen space) stay upright. Input is inverse-
+    // transformed in _boardLocal so taps still land on the cell you see.
+    if (penrose) {
+      final c = size.center(Offset.zero);
+      canvas.save();
+      canvas.translate(c.dx, c.dy);
+      canvas.rotate(pi / 4);
+      canvas.scale(1 / sqrt2);
+      canvas.translate(-c.dx, -c.dy);
     }
 
     // Board backdrop
@@ -1517,12 +1567,13 @@ class _PuzzlePainter extends CustomPainter {
       ..color = accent.withValues(alpha: 0.45)
       ..style = PaintingStyle.stroke ..strokeWidth = 1.5);
 
-    // Close the collapse transform / fade layer.
+    // Close the Penrose tilt, then the collapse transform / fade layer.
+    if (penrose)    canvas.restore();
     if (fadeLayer)  canvas.restore();
     if (collapsing) canvas.restore();
 
     // ── Collapse celebration (screen space, over the imploding region) ──────
-    if (collapsing) _drawCollapse(canvas, size, bhCenter, solveT);
+    if (collapsing) _drawCollapse(canvas, size, pivot, solveT);
   }
 
   /// A deterministic field of distant stars revealed as the region zooms out —
