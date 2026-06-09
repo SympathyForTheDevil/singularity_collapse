@@ -60,9 +60,10 @@ colours**, so removing the on-path twin instead breaks the start/end parity →
 that collapse is *provably* unsolvable. Right-choice deduction, solvable by
 construction (a probe + widget test confirm: right branch always valid, wrong
 branch always parity-dead). Win/black-hole checks use `grid.fillCount`, not
-`cellCount`. Currently `force`-only via the dev menu (`PuzzleFeature.entangled`);
-it's exclusive (reshapes the solution, so never combined with other mechanics).
-Field Guide entry unlock level (13) is a forward-looking placeholder.
+`cellCount`. **Graduated into progression:** forced on the first-encounter level
+`kEntangledLevel`=13, then ~14% per level above; also forceable via the dev menu
+(`PuzzleFeature.entangled`). It's exclusive (reshapes the solution) and **suppresses
+the additive mechanics** when present (`!wantEntangled` gates wormhole/gate/well).
 
 **Difficulty-authored generation.** Difficulty ≈ *branching*, not board size:
 fewer walls → more open → harder (more choices); more walls → more forced →
@@ -295,11 +296,13 @@ All four additive mechanics are implemented and dev-menu testable:
 | Wormhole pairs | ≥ 4 | `PuzzleFeature.wormhole` | ✅ shipped |
 | Mass gates + bosons | ≥ 7 | `PuzzleFeature.massGate` | ✅ shipped |
 | Gravity wells | ≥ 10 | `PuzzleFeature.gravityWell` | ✅ shipped |
-| Entangled pair | ≥ 13 (placeholder) | `PuzzleFeature.entangled` | ✅ shipped (force-only prototype) |
+| Entangled pair | 13 (forced) then ~14%/lvl | `PuzzleFeature.entangled` | ✅ shipped, graduated |
+| Multiverse | 16 (forced 2-board) · 26 (forced 3-board) · then ~12%/lvl | `PuzzleFeature.multiverse` | ✅ shipped, graduated |
 
 **Multiverse (stacked boards + bridges)** — in progress. **Phases 1–2 shipped** (engine
 + render/input/dev-menu; playable via dev menu → MULTIVERSE).
-`PuzzleFeature.multiverse` (force-only, exclusive; `kMultiverseLevel`=16 placeholder)
+`PuzzleFeature.multiverse` (exclusive; graduated — `kMultiverseLevel`=16 forced 2-board,
+`kMultiverse3Level`=26 forced 3-board, then ~12%/level; also dev-menu forceable)
 generates **two stacked square boards** (5×5) woven by one continuous worldline that
 crosses **bridges** between them. `PuzzleGrid` is now N-board-general: cell index =
 `board*size² + local`; `boardOf/rowOf/colOf` are board-aware, `adjacent` requires the
@@ -339,8 +342,14 @@ destination).
 rising sweep into a bright emergence chord, distinct from the wormhole warp), and a
 first-encounter tutorial card + Field Guide entry (`seen_multiverse`, id `multiverse`,
 unlock level `kMultiverseLevel`; motif = two stacked panels linked by a portal).
-**Remaining: Phase 3c** = difficulty sweep + the product call on graduating multiverse
-into normal level progression (currently force-only).
+**Phase 3c (graduation + difficulty):** multiverse and the entangled pair now **enter
+normal progression** (`generate` auto-gating): entangled forced at L13 then ~14%/level;
+multiverse forced 2-board at L16 and 3-board at L26, then ~12%/level (board count random
+2/3 once both unlocked). Both are exclusive — multiverse early-returns to its own
+generator; entangled suppresses the additive mechanics. Multiverse walls now use a
+**difficulty sweep** (best-of-12 density vs `_multiverseTarget(level, boards)`, a gentle
+board-count-scaled ramp) instead of a fixed density. Targets/probabilities are tunable by
+playtest. **Multiverse mechanic complete.**
 
 **Hunter mechanic** — shelved. Proven incompatible with fill-every-cell: on every
 Hamiltonian path the player must eventually visit the hunter's cell, making a

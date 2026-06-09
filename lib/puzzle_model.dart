@@ -21,7 +21,9 @@ enum PuzzleFeature { wormhole, massGate, gravityWell, entangled, multiverse }
 const int kWormholeLevel    = 4;
 const int kMassGateLevel    = 7;
 const int kGravityWellLevel = 10;
-const int kMultiverseLevel  = 16;   // placeholder skill-gate (force-only MVP)
+const int kEntangledLevel   = 13;   // first entangled-pair encounter (forced)
+const int kMultiverseLevel  = 16;   // first multiverse encounter (forced, 2 boards)
+const int kMultiverse3Level = 26;   // first 3-board multiverse (forced)
 
 /// A cross-board teleport link between two boards of a [multiverse] puzzle —
 /// an Einstein–Rosen / wormhole bridge. [oneWay] true → only [a]→[b] may be
@@ -232,25 +234,45 @@ class PuzzleGrid {
   /// features unlock by [level]. Used by the dev menu to test a given mechanic.
   static PuzzleGrid generate(int level,
       {Random? rng, Set<PuzzleFeature>? force, int? multiverseBoards}) {
-    final r    = rng ?? Random();
+    final r      = rng ?? Random();
+    final forced = force != null;   // dev menu picks the exact mechanic set
 
-    // Multiverse reshapes the board into stacked sheets, so it's its own path
-    // (force-only MVP, exclusive — never combined with the single-board mechanics).
-    if (force?.contains(PuzzleFeature.multiverse) ?? false) {
-      return _generateMultiverse(level, r, multiverseBoards);
+    // ── Multiverse (exclusive; reshapes the board into stacked sheets) ─────────
+    // Forced via the dev menu, OR auto: a guaranteed first encounter at level 16
+    // (2 boards) and a first 3-board board at 26, then occasional low-probability
+    // spawns. Its own generator, so this is an early return.
+    final forceMv = force?.contains(PuzzleFeature.multiverse) ?? false;
+    int? autoMvBoards;
+    if (!forced) {
+      if (level == kMultiverseLevel)       autoMvBoards = 2;
+      else if (level == kMultiverse3Level) autoMvBoards = 3;
+      else if (level > kMultiverseLevel && r.nextDouble() < 0.12) {
+        autoMvBoards = (level >= kMultiverse3Level && r.nextBool()) ? 3 : 2;
+      }
+    }
+    if (forceMv || autoMvBoards != null) {
+      return _generateMultiverse(level, r, multiverseBoards ?? autoMvBoards);
     }
 
     final size = (5 + level ~/ 3).clamp(5, 8);
     final n    = size * size;
 
-    final wantWormhole = force?.contains(PuzzleFeature.wormhole)
-        ?? (level >= kWormholeLevel);
-    final wantGate = force?.contains(PuzzleFeature.massGate)
-        ?? (level >= kMassGateLevel);
-    final wantWell = force?.contains(PuzzleFeature.gravityWell)
-        ?? (level >= kGravityWellLevel);
-    // Entangled pair is force-only for now (its own deduction mode).
-    final wantEntangled = force?.contains(PuzzleFeature.entangled) ?? false;
+    // ── Entangled pair (exclusive; reshapes the solution) ─────────────────────
+    // Forced, OR auto: a guaranteed first encounter at level 13, then occasional
+    // low-probability spawns. When present, the additive mechanics are suppressed.
+    final wantEntangled = force != null
+        ? force.contains(PuzzleFeature.entangled)
+        : (level == kEntangledLevel ||
+           (level > kEntangledLevel && r.nextDouble() < 0.14));
+
+    // Additive mechanics gate by level, but never alongside the entangled pair.
+    bool autoAdditive(int gate) => !forced && !wantEntangled && level >= gate;
+    final wantWormhole = force != null
+        ? force.contains(PuzzleFeature.wormhole)    : autoAdditive(kWormholeLevel);
+    final wantGate = force != null
+        ? force.contains(PuzzleFeature.massGate)    : autoAdditive(kMassGateLevel);
+    final wantWell = force != null
+        ? force.contains(PuzzleFeature.gravityWell) : autoAdditive(kGravityWellLevel);
 
     var sol = _hamiltonian(size, r) ?? _snake(size);
 
@@ -433,8 +455,7 @@ class PuzzleGrid {
     // space and bridge mouths spread out instead of clustering.
     final rows  = boardCount >= 3 ? 4 : 5;
     final cols  = rows + 2;                   // 5×7 (2 boards) · 4×6 (3 boards)
-    final size  = rows;                       // PuzzleGrid.size == rows
-    final na    = rows * cols;                // cells per board
+    final na    = rows * cols;                // cells per board (PuzzleGrid.size == rows)
     final total = na * boardCount;            // cellCount
 
     // Hub-and-spoke weave: board 0 (the "hub") is split into `boardCount` arcs;
@@ -508,8 +529,7 @@ class PuzzleGrid {
     }
 
     // Walls only on in-board edges the solution doesn't use (per board), so the
-    // solution stays wall-free → solvable. Bridges aren't grid edges. Moderate
-    // fixed density for the MVP (difficulty-authored sweep is a later pass).
+    // solution stays wall-free → solvable. Bridges aren't grid edges.
     bool adjG(int x, int y) {
       if (x ~/ na != y ~/ na) return false;
       final lx = x % na, ly = y % na;
@@ -520,26 +540,48 @@ class PuzzleGrid {
     for (var s = 0; s + 1 < sol.length; s++) {
       if (adjG(sol[s], sol[s + 1])) solEdges.add(edgeKey(sol[s], sol[s + 1], total));
     }
-    const density = 0.18;
-    final walls = <int>{};
-    for (var board = 0; board < boardCount; board++) {
-      final base = board * na;
-      for (var c = 0; c < na; c++) {
-        final rr = c ~/ cols, ccol = c % cols, gc = base + c;
-        if (ccol < cols - 1) {
-          final key = edgeKey(gc, gc + 1, total);
-          if (!solEdges.contains(key) && r.nextDouble() < density) walls.add(key);
-        }
-        if (rr < rows - 1) {
-          final key = edgeKey(gc, gc + cols, total);
-          if (!solEdges.contains(key) && r.nextDouble() < density) walls.add(key);
+
+    // Difficulty-authored walls: sweep density and keep the set whose branching is
+    // closest to a gentle, board-count-scaled target — same philosophy as the
+    // single-board generator, so multiverse difficulty ramps and stays consistent.
+    final target = _multiverseTarget(level, boardCount);
+    var walls = <int>{};
+    var bestErr = 1 << 30;
+    const attempts = 12;
+    for (var a = 0; a < attempts; a++) {
+      final density = 0.34 - a * (0.30 / (attempts - 1));   // 0.34 → 0.04
+      final cand = <int>{};
+      for (var board = 0; board < boardCount; board++) {
+        final base = board * na;
+        for (var c = 0; c < na; c++) {
+          final rr = c ~/ cols, ccol = c % cols, gc = base + c;
+          if (ccol < cols - 1) {
+            final key = edgeKey(gc, gc + 1, total);
+            if (!solEdges.contains(key) && r.nextDouble() < density) cand.add(key);
+          }
+          if (rr < rows - 1) {
+            final key = edgeKey(gc, gc + cols, total);
+            if (!solEdges.contains(key) && r.nextDouble() < density) cand.add(key);
+          }
         }
       }
+      final probe = PuzzleGrid(
+        size: rows, boardCols: cols, boardCount: boardCount,
+        solution: sol, milestones: ms, walls: cand, bridges: bridges);
+      final err = (probe.difficulty - target).abs();
+      if (err < bestErr) { bestErr = err; walls = cand; if (err == 0) break; }
     }
 
     return PuzzleGrid(
-      size: size, boardCols: cols, boardCount: boardCount, solution: sol,
+      size: rows, boardCols: cols, boardCount: boardCount, solution: sol,
       milestones: ms, walls: walls, bridges: bridges);
+  }
+
+  /// Gentle branching target for a multiverse board — scales mildly with level
+  /// and board count so first encounters stay guided. (Tunable by playtest.)
+  static int _multiverseTarget(int level, int boards) {
+    final perBoard = 5 + (level - kMultiverseLevel).clamp(0, 40) * 0.5; // 5 → 25
+    return (perBoard * boards).round();
   }
 
   /// Target branching-difficulty for a level — a smooth ramp. Best-of-N walls

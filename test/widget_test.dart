@@ -197,12 +197,28 @@ void main() {
     }
   });
 
-  test('multiverse is gated to force-only (never auto-spawns)', () {
-    for (var level = 1; level <= 20; level++) {
+  test('multiverse + entangled graduate into progression at their gate levels', () {
+    // Below the multiverse gate, no multiverse ever auto-spawns.
+    for (var level = 1; level < kMultiverseLevel; level++) {
       for (var s = 0; s < 10; s++) {
-        expect(PuzzleGrid.generate(level, rng: Random(s)).boardCount, 1);
+        expect(PuzzleGrid.generate(level, rng: Random(s)).boardCount, 1,
+            reason: 'level $level must not be multiverse');
       }
     }
+    // Guaranteed first encounters: 2 boards at the gate, 3 boards at the 3-board gate.
+    for (var s = 0; s < 10; s++) {
+      expect(PuzzleGrid.generate(kMultiverseLevel,  rng: Random(s)).boardCount, 2);
+      expect(PuzzleGrid.generate(kMultiverse3Level, rng: Random(s)).boardCount, 3);
+    }
+    // The entangled pair is forced on its first-encounter level (allow the odd
+    // placement miss, which falls back to a normal board).
+    var entangledSeen = 0;
+    for (var s = 0; s < 20; s++) {
+      if (PuzzleGrid.generate(kEntangledLevel, rng: Random(s)).hasQuantum) {
+        entangledSeen++;
+      }
+    }
+    expect(entangledSeen, greaterThan(15));
   });
 
   test('forced features appear regardless of level', () {
