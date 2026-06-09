@@ -1172,6 +1172,7 @@ class _PuzzlePainter extends CustomPainter {
   static const Color _well    = Color(0xffff5ca8);  // gravity-well magenta
   static const Color _soln    = Color(0xff7fd8ff);  // solution-reveal cyan
   static const Color _quantum = Color(0xffc9b8ff);  // entangled lavender
+  static const Color _universe2 = Color(0xff36d0ff); // multiverse board-2 worldline
 
   _PuzzlePainter({
     required this.grid,
@@ -1302,12 +1303,29 @@ class _PuzzlePainter extends CustomPainter {
       }
     }
 
-    // Filled-cell tint (centre-based → board-aware)
-    final fillPaint = Paint()..color = accent.withValues(alpha: 0.10);
-    for (final c in path) {
+    // Per-step "origin universe": the board each leg *departed from* (the first
+    // leg from the start board; each later leg from the near side of the bridge
+    // it crossed). Used to colour the worldline + fill so a leg visiting board 2
+    // from board 1 stays gold, while the *return* leg on board 1 shows board 2's
+    // colour — making inter-board travel legible.
+    final originBoard = List<int>.filled(path.length, 0);
+    if (path.isNotEmpty) {
+      var ob = grid.boardOf(path.first);
+      for (var i = 0; i < path.length; i++) {
+        if (i > 0 && !grid.adjacent(path[i - 1], path[i])) {
+          ob = grid.boardOf(path[i - 1]);          // departed from the near side
+        }
+        originBoard[i] = ob;
+      }
+    }
+    Color legColor(int stepIndex) =>
+        mv && originBoard[stepIndex] == 1 ? _universe2 : accent;
+
+    // Filled-cell tint (centre-based → board-aware, coloured by origin universe)
+    for (var i = 0; i < path.length; i++) {
       canvas.drawRect(
-        Rect.fromCenter(center: center(c), width: cell - 3, height: cell - 3),
-        fillPaint);
+        Rect.fromCenter(center: center(path[i]), width: cell - 3, height: cell - 3),
+        Paint()..color = legColor(i).withValues(alpha: 0.10));
     }
 
     // Walls — on the shared edge between the two cells (centre-midpoint → board-aware)
@@ -1537,30 +1555,43 @@ class _PuzzlePainter extends CustomPainter {
     }
 
     // ── Worldline ──────────────────────────────────────────────────────────
+    // Drawn as contiguous same-board runs (a non-grid step — wormhole or bridge —
+    // lifts the pen), each coloured by the universe it's traced in. So board 1 is
+    // gold, board 2 is its own colour, and the *return* leg to board 1 is gold
+    // again → you can read inter-board travel at a glance.
     if (path.length >= 2) {
-      final line = Path()..moveTo(center(path.first).dx, center(path.first).dy);
+      void drawRun(int start, int endExclusive) {
+        if (endExclusive - start < 2) return;
+        final col = legColor(start);          // whole run shares one origin
+        final p = Path()
+          ..moveTo(center(path[start]).dx, center(path[start]).dy);
+        for (var j = start + 1; j < endExclusive; j++) {
+          p.lineTo(center(path[j]).dx, center(path[j]).dy);
+        }
+        canvas.drawPath(p, Paint()
+          ..color = col.withValues(alpha: 0.26)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = cell * 0.60
+          ..strokeJoin = StrokeJoin.round
+          ..strokeCap = StrokeCap.round
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6));
+        canvas.drawPath(p, Paint()
+          ..color = col
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = cell * 0.28
+          ..strokeJoin = StrokeJoin.round
+          ..strokeCap = StrokeCap.round);
+      }
+      var runStart = 0;
       for (var i = 1; i < path.length; i++) {
-        // A wormhole jump isn't a grid edge — lift the pen so the line doesn't
-        // streak across the board; the portals carry the connection visually.
-        if (grid.adjacent(path[i - 1], path[i])) {
-          line.lineTo(center(path[i]).dx, center(path[i]).dy);
-        } else {
-          line.moveTo(center(path[i]).dx, center(path[i]).dy);
+        // A wormhole/bridge jump isn't a grid edge — end the run there (the
+        // portals/mouths carry the connection visually).
+        if (!grid.adjacent(path[i - 1], path[i])) {
+          drawRun(runStart, i);
+          runStart = i;
         }
       }
-      canvas.drawPath(line, Paint()
-        ..color = accent.withValues(alpha: 0.26)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = cell * 0.60
-        ..strokeJoin = StrokeJoin.round
-        ..strokeCap = StrokeCap.round
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6));
-      canvas.drawPath(line, Paint()
-        ..color = accent
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = cell * 0.28
-        ..strokeJoin = StrokeJoin.round
-        ..strokeCap = StrokeCap.round);
+      drawRun(runStart, path.length);
     }
 
     // ── Measured (chosen) twin ───────────────────────────────────────────────
