@@ -334,9 +334,13 @@ rows×cols-aware (shared by painter + input). Each universe has a signature colo
 (gold/azure/rose, `_universeColor`) on its border + panel wash;
 worldline legs are coloured by the universe they **departed from**, and each **bridge mouth
 is coloured by the universe it leads TO** (so clustered portals are told apart by
-destination). **Remaining: Phase 3b** = dedicated bridge audio, tutorial +
-field-guide entry; **Phase 3c** = difficulty sweep + the product call on graduating
-multiverse into normal level progression (currently force-only).
+destination).
+**Phase 3b:** dedicated bridge audio (`AudioService.bridge()` / `_bridgeWhoosh` — a deep
+rising sweep into a bright emergence chord, distinct from the wormhole warp), and a
+first-encounter tutorial card + Field Guide entry (`seen_multiverse`, id `multiverse`,
+unlock level `kMultiverseLevel`; motif = two stacked panels linked by a portal).
+**Remaining: Phase 3c** = difficulty sweep + the product call on graduating multiverse
+into normal level progression (currently force-only).
 
 **Hunter mechanic** — shelved. Proven incompatible with fill-every-cell: on every
 Hamiltonian path the player must eventually visit the hunter's cell, making a

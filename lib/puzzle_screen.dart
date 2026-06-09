@@ -198,6 +198,7 @@ class _PuzzleScreenState extends State<PuzzleScreen>
       'seen_gate'     => grid.gates.isNotEmpty,
       'seen_well'     => grid.wells.isNotEmpty,
       'seen_entangled'=> grid.hasQuantum,
+      'seen_multiverse'=> grid.hasMultiverse,
       _               => false,
     };
     for (final card in kTutorialCards) {
@@ -582,7 +583,7 @@ class _PuzzleScreenState extends State<PuzzleScreen>
         path..add(cell)..add(bexit);
         _slingFrom = null; _slingTo = null;
         HapticFeedback.heavyImpact();
-        AudioService.instance.warp();
+        AudioService.instance.bridge();
         _warp.forward(from: 0);
         if (path.length == grid.fillCount) _onSolved();
         setState(() {});

@@ -37,6 +37,7 @@ class AudioService {
   AudioSource? _unlock;
   AudioSource? _sling;
   AudioSource? _measure;
+  AudioSource? _bridge;
   AudioSource? _pad;
   SoundHandle? _padHandle;
 
@@ -136,6 +137,13 @@ class AudioService {
     _soloud.play(_measure!, volume: 0.55);
   }
 
+  /// Worldline crossed a multiverse bridge to another universe — a deep rising
+  /// sweep into a bright emergence shimmer (more interdimensional than a warp).
+  void bridge() {
+    if (!_ready || _muted || _bridge == null) return;
+    _soloud.play(_bridge!, volume: 0.55);
+  }
+
   // ── Ambient bed ────────────────────────────────────────────────────────────
   Future<void> startAmbient({bool calm = false}) async {
     if (!_ready || _muted || _pad == null || _padHandle != null) return;
@@ -170,6 +178,7 @@ class AudioService {
     _unlock   = await _load('unlock',   _unlockChime());
     _sling    = await _load('sling',    _slingSweep());
     _measure  = await _load('measure',  _measureChime());
+    _bridge   = await _load('bridge',   _bridgeWhoosh());
     _collapse = await _load('collapse', _collapseStinger());
     _pad      = await _load('pad',      _padLoop(8.0));
   }
@@ -225,6 +234,38 @@ class AudioService {
       final env = (i < atk ? i / atk : 1.0) * (1 - x);
       final vib = 1 + 0.02 * sin(2 * pi * 30 * t);
       out[i] = sin(2 * pi * f * t * vib) * env * 0.5;
+    }
+    return out;
+  }
+
+  /// A multiverse bridge crossing: a deep airy sweep accelerating upward
+  /// (falling through the mouth) that resolves into a bright chord ringing in
+  /// (emerging in the other universe). Longer and lower than the wormhole warp.
+  Float64List _bridgeWhoosh() {
+    const durSec = 0.5;
+    final out = _alloc(durSec);
+    final atk = 0.006 * _sr;
+    const emerge = 0.30;                       // arrival moment (seconds)
+    const chord  = [659.25, 987.77, 1318.5];   // E5, B5, E6 — bright emergence
+    for (var i = 0; i < out.length; i++) {
+      final t = i / _sr;
+      final x = t / durSec;
+      var s = 0.0;
+      // Departure: low airy rise with a touch of vibrato.
+      final f   = 170 + 720 * x * x;           // accelerating sweep up
+      final env = (i < atk ? i / atk : 1.0) *
+                  (t < emerge ? 1.0 : exp(-(t - emerge) * 6));
+      s += sin(2 * pi * f * t * (1 + 0.015 * sin(2 * pi * 38 * t))) * env * 0.5;
+      // Emergence: a bright chord swelling in at the arrival, ringing out.
+      final d = t - emerge;
+      if (d >= 0) {
+        var sh = 0.0;
+        for (var k = 0; k < chord.length; k++) {
+          sh += sin(2 * pi * chord[k] * t) / (k + 1.4);
+        }
+        s += sh * (1 - exp(-d * 40)) * exp(-d * 7) * 0.22;
+      }
+      out[i] = s * 0.5;
     }
     return out;
   }

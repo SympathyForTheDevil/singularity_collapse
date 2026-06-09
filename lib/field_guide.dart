@@ -18,6 +18,7 @@ class GuideEntry {
 class GuideService {
   static const keys = [
     'seen_core', 'seen_wormhole', 'seen_gate', 'seen_well', 'seen_entangled',
+    'seen_multiverse',
   ];
 
   static Future<Set<String>> seen() async {
@@ -67,6 +68,13 @@ const List<GuideEntry> kGuideEntries = [
     'Exactly one collapse leaves the region fillable; the other strands you — '
     'undo and try the twin.',
     'seen_entangled', 13),
+  GuideEntry('multiverse', 'Multiverse',
+    'Several stacked universes, each its own colour, linked by bridges. Two-way '
+    'bridges (twin portals) let you cross either direction; one-way bridges (a '
+    'dark mouth feeding a bright white hole) only go one way — no return. A '
+    'bridge is coloured by the universe it leads to. Fill EVERY cell of EVERY '
+    'universe; finish on the Black Hole.',
+    'seen_multiverse', kMultiverseLevel),
 ];
 
 /// The four first-encounter teaching cards (Core + the three mechanics).
@@ -92,6 +100,11 @@ const List<GuideEntry> kTutorialCards = [
     'Only one choice keeps the region solvable — choose well, or undo and try '
     'the other.',
     'seen_entangled', 13),
+  GuideEntry('multiverse', 'MULTIVERSE',
+    'Stacked universes linked by bridges. Two-way portals cross either way; '
+    'one-way bridges (dark mouth → white hole) never return. A bridge is '
+    'coloured by where it leads. Fill every cell of every universe.',
+    'seen_multiverse', kMultiverseLevel),
 ];
 
 // ── Palette (mirrors the in-game motif colours) ─────────────────────────────
@@ -179,6 +192,25 @@ class _GuideIconPainter extends CustomPainter {
         canvas.drawPath(a, Paint()
           ..color = _well ..style = PaintingStyle.stroke ..strokeWidth = 2.5
           ..strokeJoin = StrokeJoin.round);
+      case 'multiverse':
+        const azure = Color(0xff36d0ff);
+        // Two stacked universe panels (gold + azure) linked by a portal bridge.
+        canvas.drawRRect(
+          RRect.fromRectAndRadius(
+            Rect.fromLTWH(u * 0.26, u * 0.16, u * 0.48, u * 0.30),
+            const Radius.circular(4)),
+          Paint()..color = _gold ..style = PaintingStyle.stroke ..strokeWidth = 2);
+        canvas.drawRRect(
+          RRect.fromRectAndRadius(
+            Rect.fromLTWH(u * 0.26, u * 0.54, u * 0.48, u * 0.30),
+            const Radius.circular(4)),
+          Paint()..color = azure ..style = PaintingStyle.stroke ..strokeWidth = 2);
+        canvas.drawLine(Offset(c.dx, u * 0.46), Offset(c.dx, u * 0.54),
+          Paint()..color = azure.withValues(alpha: 0.7) ..strokeWidth = 1.6);
+        canvas.drawCircle(Offset(c.dx, u * 0.46), u * 0.055, Paint()
+          ..color = _gold ..style = PaintingStyle.stroke ..strokeWidth = 2);
+        canvas.drawCircle(Offset(c.dx, u * 0.54), u * 0.055, Paint()
+          ..color = azure ..style = PaintingStyle.stroke ..strokeWidth = 2);
     }
   }
 
