@@ -36,45 +36,48 @@ class PuzzleScreen extends StatefulWidget {
 const double _kBoardGap = 18;
 
 /// Where each board of a (possibly multi-board) puzzle sits inside the board
-/// area, and how big its cells are. Boards stack vertically, each square, cell
-/// size maximised to fit the area; the group is centred. Shared by the painter
-/// (render) and the screen (input hit-testing) so they never drift apart.
+/// area, and how big its cells are. Boards stack vertically (rows × cols, square
+/// cells), cell size maximised to fit the area; the group is centred. Shared by
+/// the painter (render) and the screen (input hit-testing) so they never drift.
 class _BoardLayout {
   final double cell;
   final List<Offset> origins;   // top-left of each board (length boardCount)
-  final int size;               // per-board grid size
-  final int na;                 // size * size
-  const _BoardLayout(this.cell, this.origins, this.size, this.na);
+  final int rows;               // per-board grid height (cells)
+  final int cols;               // per-board grid width  (cells)
+  final int na;                 // rows * cols
+  const _BoardLayout(this.cell, this.origins, this.rows, this.cols, this.na);
 
-  static _BoardLayout of(Size area, int boardCount, int size) {
+  double get boardW => cols * cell;
+  double get boardH => rows * cell;
+
+  static _BoardLayout of(Size area, int boardCount, int rows, int cols) {
     final cell = min(
-      area.width / size,
-      (area.height - _kBoardGap * (boardCount - 1)) / boardCount / size,
+      area.width / cols,
+      (area.height - _kBoardGap * (boardCount - 1)) / boardCount / rows,
     );
-    final boardPx = size * cell;
-    final totalH  = boardPx * boardCount + _kBoardGap * (boardCount - 1);
+    final boardW = cols * cell, boardH = rows * cell;
+    final totalH = boardH * boardCount + _kBoardGap * (boardCount - 1);
     final top  = (area.height - totalH) / 2;
-    final left = (area.width  - boardPx) / 2;
+    final left = (area.width  - boardW) / 2;
     return _BoardLayout(cell, [
       for (var b = 0; b < boardCount; b++)
-        Offset(left, top + b * (boardPx + _kBoardGap)),
-    ], size, size * size);
+        Offset(left, top + b * (boardH + _kBoardGap)),
+    ], rows, cols, rows * cols);
   }
 
   Offset center(int g) {
     final o = origins[g ~/ na], li = g % na;
-    return Offset(o.dx + (li % size + 0.5) * cell,
-                  o.dy + (li ~/ size + 0.5) * cell);
+    return Offset(o.dx + (li % cols + 0.5) * cell,
+                  o.dy + (li ~/ cols + 0.5) * cell);
   }
 
   int? cellAt(Offset p) {
-    final boardPx = size * cell;
     for (var b = 0; b < origins.length; b++) {
       final lx = p.dx - origins[b].dx, ly = p.dy - origins[b].dy;
-      if (lx < 0 || ly < 0 || lx >= boardPx || ly >= boardPx) continue;
-      final c = (lx / cell).floor().clamp(0, size - 1);
-      final r = (ly / cell).floor().clamp(0, size - 1);
-      return b * na + r * size + c;
+      if (lx < 0 || ly < 0 || lx >= boardW || ly >= boardH) continue;
+      final c = (lx / cell).floor().clamp(0, cols - 1);
+      final r = (ly / cell).floor().clamp(0, rows - 1);
+      return b * na + r * cols + c;
     }
     return null;
   }
@@ -83,8 +86,8 @@ class _BoardLayout {
   /// [p] isn't on that cell's board. Used by the undo deep-inside gate.
   Offset? fracInCell(Offset p, int g) {
     final o = origins[g ~/ na], li = g % na;
-    return Offset((p.dx - o.dx - (li % size) * cell) / cell,
-                  (p.dy - o.dy - (li ~/ size) * cell) / cell);
+    return Offset((p.dx - o.dx - (li % cols) * cell) / cell,
+                  (p.dy - o.dy - (li ~/ cols) * cell) / cell);
   }
 }
 
@@ -840,7 +843,8 @@ class _PuzzleScreenState extends State<PuzzleScreen>
                                    (cons.maxHeight -  8).clamp(240.0, 1000.0))
                             : Size(side, side);
                         _boardSize = side;
-                        _layout    = _BoardLayout.of(area, grid.boardCount, grid.size);
+                        _layout    = _BoardLayout.of(
+                            area, grid.boardCount, grid.size, grid.cols);
                         return GestureDetector(
                           onTapUp:     (d) => _onTap(d.localPosition),
                           onPanStart:  (d) => _onPan(d.localPosition),
@@ -1223,7 +1227,7 @@ class _PuzzlePainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final mv     = grid.hasMultiverse;
     final n      = grid.size;
-    final layout = mv ? _BoardLayout.of(size, grid.boardCount, n) : null;
+    final layout = mv ? _BoardLayout.of(size, grid.boardCount, n, grid.cols) : null;
     final cell   = mv ? layout!.cell : size.width / n;
     final pulseV = sin(pulse * 2 * pi) * 0.5 + 0.5;
 
@@ -1293,8 +1297,8 @@ class _PuzzlePainter extends CustomPainter {
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1;
     if (mv) {
-      final boardPx = n * cell;
-      for (var b = 0; b < layout!.origins.length; b++) {
+      final boardW = layout!.boardW, boardH = layout.boardH;
+      for (var b = 0; b < layout.origins.length; b++) {
         final o = layout.origins[b];
         // Each universe carries its own tint so the *board* is identifiable even
         // when the worldline on it is another universe's colour. Board 1 stays the
@@ -1308,15 +1312,17 @@ class _PuzzlePainter extends CustomPainter {
             : Color.lerp(const Color(0xff142030), tint, 0.30)!;
         canvas.drawRRect(
           RRect.fromRectAndRadius(
-            Rect.fromLTWH(o.dx, o.dy, boardPx, boardPx), const Radius.circular(8)),
+            Rect.fromLTWH(o.dx, o.dy, boardW, boardH), const Radius.circular(8)),
           Paint()..color = panel);
         final gp = Paint()..color = glow
           ..style = PaintingStyle.stroke ..strokeWidth = 1;
-        for (var i = 0; i <= n; i++) {
+        for (var i = 0; i <= grid.cols; i++) {
           canvas.drawLine(Offset(o.dx + i * cell, o.dy),
-                          Offset(o.dx + i * cell, o.dy + boardPx), gp);
+                          Offset(o.dx + i * cell, o.dy + boardH), gp);
+        }
+        for (var i = 0; i <= n; i++) {
           canvas.drawLine(Offset(o.dx, o.dy + i * cell),
-                          Offset(o.dx + boardPx, o.dy + i * cell), gp);
+                          Offset(o.dx + boardW, o.dy + i * cell), gp);
         }
       }
     } else {
@@ -1769,13 +1775,13 @@ class _PuzzlePainter extends CustomPainter {
     // Outer border(s) — one per board in multiverse, tinted by universe (board 2
     // azure) so each board's identity reads at a glance.
     if (mv) {
-      final boardPx = n * cell;
-      for (var b = 0; b < layout!.origins.length; b++) {
+      final boardW = layout!.boardW, boardH = layout.boardH;
+      for (var b = 0; b < layout.origins.length; b++) {
         final o = layout.origins[b];
         final col = _universeColor(b);
         canvas.drawRRect(
           RRect.fromRectAndRadius(
-            Rect.fromLTWH(o.dx, o.dy, boardPx, boardPx), const Radius.circular(8)),
+            Rect.fromLTWH(o.dx, o.dy, boardW, boardH), const Radius.circular(8)),
           Paint()..color = col.withValues(alpha: 0.55)
             ..style = PaintingStyle.stroke ..strokeWidth = 1.8);
         _drawUniverseLabel(canvas, o, b, cell);

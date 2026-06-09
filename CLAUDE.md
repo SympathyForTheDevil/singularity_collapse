@@ -323,11 +323,18 @@ into `boardCount` arcs and each other board (a "spoke") is fully covered between
 (A₁ S₁ A₂ S₂ … Aₙ), with 2·(boardCount−1) bridges → covers all cells, ≥1 one-way + ≥1
 two-way, solvable by construction. Generalises the 2-board A→B→A weave. Hub cut points are
 ≥2 apart (a 1-cell interior arc would be both a landing and the next mouth — degenerate).
-Board count: 2 (5×5) or 3 (4×4), via `generate(multiverseBoards:)` (dev menu MULTIVERSE
-×2 / ×3) or ~45% random when unset. Each universe has a signature colour (gold/azure/rose,
-`_universeColor`) on its border + panel wash + a roman-numeral label; worldline legs are
-coloured by the universe they **departed from**. Render/input were already N-board-general
-(`_BoardLayout.origins`). **Remaining: Phase 3b** = dedicated bridge audio, tutorial +
+Board count: 2 or 3, via `generate(multiverseBoards:)` (dev menu MULTIVERSE ×2 / ×3) or
+~45% random when unset. Boards are **rectangular (wider than tall)** to use the horizontal
+space and spread bridge mouths out: `rows × cols` = 5×7 (2 boards) / 4×6 (3 boards).
+`PuzzleGrid.size` = rows, `boardCols` = cols (null ⇒ square for single-board); `cols`,
+`_na`, `rowOf/colOf/cellCount/_neighG` are cols-aware (identical to before when square).
+Multiverse generation uses rectangular Hamiltonian helpers (`_hamiltonianRect/_snakeRect/
+_neighRect`); the square helpers are untouched for single-board. `_BoardLayout` is
+rows×cols-aware (shared by painter + input). Each universe has a signature colour
+(gold/azure/rose, `_universeColor`) on its border + panel wash + a roman-numeral label;
+worldline legs are coloured by the universe they **departed from**, and each **bridge mouth
+is coloured by the universe it leads TO** (so clustered portals are told apart by
+destination). **Remaining: Phase 3b** = dedicated bridge audio, tutorial +
 field-guide entry; **Phase 3c** = difficulty sweep + the product call on graduating
 multiverse into normal level progression (currently force-only).
 

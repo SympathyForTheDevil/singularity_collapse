@@ -149,7 +149,7 @@ void main() {
       final g = PuzzleGrid.generate(
         12, rng: Random(seed), force: {PuzzleFeature.multiverse},
         multiverseBoards: boards);
-      final na = g.size * g.size;
+      final na = g.size * g.cols;
 
       // Every board is covered exactly once by one continuous solution.
       expect(g.boardCount, boards);

@@ -48,6 +48,9 @@ class PuzzleGrid {
   final int ghostCell;            // entangled twin OFF the solution (vanishes)
   final int boardCount;           // stacked boards (1 = normal; >1 = multiverse)
   final List<Bridge> bridges;     // cross-board teleport links (multiverse)
+  /// Columns per board. Null ⇒ square (cols == size). Multiverse boards are wider
+  /// than tall (rows == [size], cols == [boardCols]) to use the horizontal space.
+  final int? boardCols;
 
   /// How many cells a gravity well flings you (in addition to the well cell).
   static const int wellRange = 2;
@@ -65,6 +68,7 @@ class PuzzleGrid {
     this.ghostCell = -1,
     this.boardCount = 1,
     this.bridges = const [],
+    this.boardCols,
   });
 
   /// Launch direction delta for the well on [cell], or null.
@@ -118,23 +122,24 @@ class PuzzleGrid {
 
   bool get hasMultiverse => boardCount > 1;
 
-  int get cellCount      => size * size * boardCount;
+  int get cols => boardCols ?? size;       // board width  (cells); rows == size
+  int get cellCount      => size * cols * boardCount;
   int get milestoneCount => milestones.length;
 
-  int get _na => size * size;             // cells per board
+  int get _na => size * cols;              // cells per board
   int boardOf(int i) => i ~/ _na;
-  int rowOf(int i) => (i % _na) ~/ size;
-  int colOf(int i) => (i % _na) % size;
+  int rowOf(int i) => (i % _na) ~/ cols;
+  int colOf(int i) => (i % _na) % cols;
 
   /// In-board grid neighbours of [cell] as global indices (never crosses boards).
   List<int> _neighG(int cell) {
     final base = boardOf(cell) * _na, li = cell % _na;
-    final r = li ~/ size, c = li % size;
+    final r = li ~/ cols, c = li % cols;
     final o = <int>[];
-    if (r > 0)        o.add(base + li - size);
-    if (r < size - 1) o.add(base + li + size);
+    if (r > 0)        o.add(base + li - cols);
+    if (r < size - 1) o.add(base + li + cols);
     if (c > 0)        o.add(base + li - 1);
-    if (c < size - 1) o.add(base + li + 1);
+    if (c < cols - 1) o.add(base + li + 1);
     return o;
   }
 
@@ -424,19 +429,24 @@ class PuzzleGrid {
     var boardCount = forcedBoards ?? (r.nextDouble() < 0.45 ? 3 : 2);
     if (boardCount < 2) boardCount = 2;
     if (boardCount > 3) boardCount = 3;
-    final size  = boardCount >= 3 ? 4 : 5;   // smaller cells when stacking 3
-    final na    = size * size;               // cells per board
-    final total = na * boardCount;           // cellCount
+    // Boards are wider than tall (rows × cols) so the stack uses the horizontal
+    // space and bridge mouths spread out instead of clustering.
+    final rows  = boardCount >= 3 ? 4 : 5;
+    final cols  = rows + 2;                   // 5×7 (2 boards) · 4×6 (3 boards)
+    final size  = rows;                       // PuzzleGrid.size == rows
+    final na    = rows * cols;                // cells per board
+    final total = na * boardCount;            // cellCount
 
     // Hub-and-spoke weave: board 0 (the "hub") is split into `boardCount` arcs;
     // each other board (a "spoke") is fully covered between consecutive hub arcs,
     // entered and left by a bridge → one worldline covering every cell of every
     // board with 2·(boardCount-1) cross-board jumps (A₁ S₁ A₂ S₂ … A_n). This
     // generalises the 2-board A→B→A weave; always solvable by construction.
-    final hub = _hamiltonian(size, r) ?? _snake(size);
+    final hub = _hamiltonianRect(rows, cols, r) ?? _snakeRect(rows, cols);
     final spokes = <List<int>>[
       for (var b = 1; b < boardCount; b++)
-        (_hamiltonian(size, r) ?? _snake(size)).map((c) => c + b * na).toList(),
+        (_hamiltonianRect(rows, cols, r) ?? _snakeRect(rows, cols))
+            .map((c) => c + b * na).toList(),
     ];
 
     // boardCount-1 hub cut points (sorted) in [1, na-3], every pair ≥2 apart so
@@ -503,8 +513,8 @@ class PuzzleGrid {
     bool adjG(int x, int y) {
       if (x ~/ na != y ~/ na) return false;
       final lx = x % na, ly = y % na;
-      return ((lx ~/ size) - (ly ~/ size)).abs() +
-             ((lx %  size) - (ly %  size)).abs() == 1;
+      return ((lx ~/ cols) - (ly ~/ cols)).abs() +
+             ((lx %  cols) - (ly %  cols)).abs() == 1;
     }
     final solEdges = <int>{};
     for (var s = 0; s + 1 < sol.length; s++) {
@@ -515,21 +525,21 @@ class PuzzleGrid {
     for (var board = 0; board < boardCount; board++) {
       final base = board * na;
       for (var c = 0; c < na; c++) {
-        final rr = c ~/ size, ccol = c % size, gc = base + c;
-        if (ccol < size - 1) {
+        final rr = c ~/ cols, ccol = c % cols, gc = base + c;
+        if (ccol < cols - 1) {
           final key = edgeKey(gc, gc + 1, total);
           if (!solEdges.contains(key) && r.nextDouble() < density) walls.add(key);
         }
-        if (rr < size - 1) {
-          final key = edgeKey(gc, gc + size, total);
+        if (rr < rows - 1) {
+          final key = edgeKey(gc, gc + cols, total);
           if (!solEdges.contains(key) && r.nextDouble() < density) walls.add(key);
         }
       }
     }
 
     return PuzzleGrid(
-      size: size, boardCount: boardCount, solution: sol, milestones: ms,
-      walls: walls, bridges: bridges);
+      size: size, boardCols: cols, boardCount: boardCount, solution: sol,
+      milestones: ms, walls: walls, bridges: bridges);
   }
 
   /// Target branching-difficulty for a level — a smooth ramp. Best-of-N walls
@@ -631,6 +641,63 @@ class PuzzleGrid {
         for (var c = 0; c < size; c++) p.add(r * size + c);
       } else {
         for (var c = size - 1; c >= 0; c--) p.add(r * size + c);
+      }
+    }
+    return p;
+  }
+
+  // ── Rectangular variants (rows × cols) — used by multiverse boards, which are
+  // wider than tall. The square helpers above are left untouched for the
+  // single-board game. ───────────────────────────────────────────────────────
+  static List<int> _neighRect(int i, int rows, int cols) {
+    final r = i ~/ cols, c = i % cols;
+    final o = <int>[];
+    if (r > 0)        o.add(i - cols);
+    if (r < rows - 1) o.add(i + cols);
+    if (c > 0)        o.add(i - 1);
+    if (c < cols - 1) o.add(i + 1);
+    return o;
+  }
+
+  static int _countUnvisitedRect(int i, List<bool> visited, int rows, int cols) {
+    var cnt = 0;
+    for (final x in _neighRect(i, rows, cols)) {
+      if (!visited[x]) cnt++;
+    }
+    return cnt;
+  }
+
+  static List<int>? _hamiltonianRect(int rows, int cols, Random rng) {
+    final n = rows * cols;
+    for (var attempt = 0; attempt < 400; attempt++) {
+      final start   = rng.nextInt(n);
+      final visited = List<bool>.filled(n, false);
+      final path    = <int>[start];
+      visited[start] = true;
+      var cur = start;
+      var stuck = false;
+      while (path.length < n) {
+        final nbrs = _neighRect(cur, rows, cols).where((x) => !visited[x]).toList();
+        if (nbrs.isEmpty) { stuck = true; break; }
+        nbrs.shuffle(rng);
+        nbrs.sort((a, b) => _countUnvisitedRect(a, visited, rows, cols)
+            .compareTo(_countUnvisitedRect(b, visited, rows, cols)));
+        cur = nbrs.first;
+        visited[cur] = true;
+        path.add(cur);
+      }
+      if (!stuck && path.length == n) return path;
+    }
+    return null;
+  }
+
+  static List<int> _snakeRect(int rows, int cols) {
+    final p = <int>[];
+    for (var r = 0; r < rows; r++) {
+      if (r.isEven) {
+        for (var c = 0; c < cols; c++) p.add(r * cols + c);
+      } else {
+        for (var c = cols - 1; c >= 0; c--) p.add(r * cols + c);
       }
     }
     return p;
