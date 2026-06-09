@@ -103,16 +103,17 @@ sample (then update this doc). The reverb setup is wrapped in its own try/catch
 so a filter hiccup never costs the dry audio.
 
 **Tutorial & Field Guide (`lib/field_guide.dart`).** First-encounter teaching:
-the first time the player meets the Core, a Wormhole, a Mass Gate, or a Gravity
-Well, `PuzzleScreen` shows a one-time modal card (`_buildTutorialCard`, queued in
-`_cards`) over the dimmed board; "GOT IT" dismisses and marks it seen. State is
-persisted via `GuideService` (`seen_core/_wormhole/_gate/_well`) — the same flags
-drive the **Field Guide** (`FieldGuideScreen`, book icon top-left on Home): every
-concept/object is listed, but un-encountered entries are blacked out showing
-"UNLOCKS AT LEVEL X" (the mechanic's skill-gate level). To add a mechanic: append
-to `kGuideEntries` (+ `kTutorialCards` if it deserves a card) and add a motif to
-`_GuideIconPainter`. The old transient "NEW · …" hint intros were replaced by these
-cards; `_showHint` is now only for in-context nudges (blocked moves).
+the first time the player meets the Core, a Wormhole, a Mass Gate, a Gravity Well,
+or an Entangled Pair, `PuzzleScreen` shows a one-time modal card
+(`_buildTutorialCard`, queued in `_cards`) over the dimmed board; "GOT IT"
+dismisses and marks it seen. State is persisted via `GuideService`
+(`seen_core/_wormhole/_gate/_well/_entangled`) — the same flags drive the **Field
+Guide** (`FieldGuideScreen`, book icon top-left on Home): every concept/object is
+listed, but un-encountered entries are blacked out showing "UNLOCKS AT LEVEL X"
+(the mechanic's skill-gate level). To add a mechanic: append to `kGuideEntries`
+(+ `kTutorialCards` if it deserves a card) and add a motif to `_GuideIconPainter`.
+The old transient "NEW · …" hint intros were replaced by these cards; `_showHint`
+is now only for in-context nudges (blocked moves).
 
 **Portrait only.** Locked in `main.dart`. Do not add landscape.
 
@@ -175,8 +176,9 @@ one-time `NEW · …` intro hint (persisted via `seen_wormhole` / `seen_gate`).
 `PuzzleGrid.generate(level, {force})` gates by level unless `force` (a
 `Set<PuzzleFeature>`) overrides it — `null` = auto by level, `{}` = none, e.g.
 `{PuzzleFeature.massGate}` = force that mechanic. This is what the **dev menu**
-(home screen "· dev ·" → NORMAL / WORMHOLE / MASS GATE / BOTH) uses to launch a
-board with a chosen mechanic via `PuzzleScreen(forceFeatures:, fixedLevel:)`.
+(home screen "· dev ·" → NORMAL / WORMHOLE / MASS GATE / GRAVITY WELL /
+ENTANGLED PAIR / ALL (NO QUANTUM)) uses to launch a board with a chosen mechanic
+via `PuzzleScreen(forceFeatures:, fixedLevel:)`.
 
 - **Wormhole pairs** (`wormholes`, level ≥ `kWormholeLevel` = 4): two linked
   cells; the worldline steps between twins. Built by reversing the tail of the
@@ -201,9 +203,10 @@ board with a chosen mechanic via `PuzzleScreen(forceFeatures:, fixedLevel:)`.
   solution already runs straight for `wellRange` steps → the launch corridor is
   the solution's own next cells, guaranteed clear when reached → solvable by
   construction. `_canStep` only accepts the well if `_wellCorridorClear`; entering
-  launches via `_wellPath` and records the well index in `_launches` so **undo is
-  atomic** (the whole fling unwinds, not one corridor cell — drag-back through a
-  launch is disabled, Undo handles it; `_truncateTo` snaps to before the well).
+  launches via `_wellPath` and records the move in `_atomic` (start-index →
+  cells added) so **undo is atomic** (the whole fling unwinds, not one corridor
+  cell — drag-back through a launch is disabled, Undo handles it; `_truncateTo`
+  snaps to before the well).
   Blocked launch → `_nudgeWell`. Drawn magenta (swirl + arrow + landing dots);
   `slingshot()` audio + `_sling` launch streak.
 
@@ -260,25 +263,40 @@ for an unsigned (debug-signed) fallback that still installs fine for testing.
 
 ---
 
+## Shipped mechanics (summary)
+
+All four additive mechanics are implemented and dev-menu testable:
+
+| Mechanic | Level gate | Force flag | Status |
+|---|---|---|---|
+| Wormhole pairs | ≥ 4 | `PuzzleFeature.wormhole` | ✅ shipped |
+| Mass gates + bosons | ≥ 7 | `PuzzleFeature.massGate` | ✅ shipped |
+| Gravity wells | ≥ 10 | `PuzzleFeature.gravityWell` | ✅ shipped |
+| Entangled pair | ≥ 13 (placeholder) | `PuzzleFeature.entangled` | ✅ shipped (force-only prototype) |
+
+**Hunter mechanic** — shelved. Proven incompatible with fill-every-cell: on every
+Hamiltonian path the player must eventually visit the hunter's cell, making a
+"safe" route impossible regardless of hunter period. Viable only as a separate
+escape/boss mode (not a normal-puzzle addon).
+
+---
+
 ## Planned next features (priority order)
 
-1. **Remaining unique mechanic** — hunter enemy (tonal gamble; deferred). Three
-   additive mechanics shipped: wormholes, mass gates + bosons, gravity wells.
-2. **Daily seed** — date-seeded daily puzzle (same board for everyone), streak,
-   clipboard share card.
-3. **Audio** — ✅ done (see the Audio section above). `flutter_soloud` hybrid:
-   procedural pentatonic milestone ladder, step ticks, denied tone, layered
-   collapse stinger, looping ambient pad, global reverb, mute toggle. Possible
-   follow-ups: swap the collapse/shimmer for produced samples; per-mode music
-   intensity; a fuller settings screen (volume slider, separate SFX/music).
-4. **Menu / level select** — a proper home screen with solved-count display
-   and level progression indicators.
-5. **Android signing** — ✅ keystore generated (`android/collapse-release.jks`,
-   git-ignored; local creds in `android/key.properties`). `build.gradle.kts`
-   already reads CI env vars / local `key.properties` and verified to produce a
-   release-signed APK (cert CN=Singularity Collapse). **Remaining:** set the four
-   GitHub secrets (KEYSTORE_BASE64, KEY_STORE_PASSWORD, KEY_PASSWORD, KEY_ALIAS;
-   base64 + values in `~/collapse-signing/`) so CI stops debug-signing — debug
-   signatures vary per runner and break in-place updates ("App not installed").
-   The CI also passes `--build-number=${{ github.run_number }}` so each build's
-   versionCode increases. **Keep the keystore + password backed up.**
+1. **Retention / meta-progression** — par times + medals per daily (Bronze = solve,
+   Silver = under par, Gold = no backtracks); star-map (each daily solve lights a
+   star in a monthly constellation); streak-freeze token; weekly Constellation set.
+2. **Level progression** — proper home-screen level select/indicator; difficulty
+   ramp display; mechanic unlocks visible in the menu flow (not just the dev panel).
+3. **Entangled pair tuning** — playtest frequency and level placement; decide
+   whether it mixes into normal progression or stays as a sparse boss-level mechanic.
+4. **Boss / escape mode** — hunter revisited as a dedicated escape-style level
+   (separate from normal puzzle flow, where fill-every-cell doesn't apply).
+5. **Audio follow-ups** (optional) — produced sample for collapse stinger; per-mode
+   ambient intensity; settings screen with volume + SFX/music sliders.
+6. **Android signing** — ✅ DONE. Keystore at `android/collapse-release.jks`
+   (git-ignored). GitHub secrets set: KEYSTORE_BASE64, KEY_STORE_PASSWORD,
+   KEY_PASSWORD (`NT2FltZM5SGXKhaYKgYg`), KEY_ALIAS (`collapse`). CI builds
+   release-signed APKs; `--build-number=${{ github.run_number }}` increments
+   versionCode each push. Backup at `~/collapse-signing/`. **Keep the keystore
+   backed up — losing it blocks Play Store updates.**
