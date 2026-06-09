@@ -1558,23 +1558,29 @@ class _PuzzlePainter extends CustomPainter {
     if (mv) {
       for (final br in grid.bridges) {
         final pa = center(br.a), pb = center(br.b);
+        // A mouth is coloured by the universe it takes you TO (its other end), so
+        // clustered portals are told apart by destination at a glance. The
+        // connector takes the spoke (non-hub) universe's colour to group the pair.
+        final boardA = grid.boardOf(br.a), boardB = grid.boardOf(br.b);
+        final destA  = _universeColor(boardB);   // mouth a → board of b
+        final destB  = _universeColor(boardA);   // mouth b → board of a
+        final connCol = _universeColor(boardA == 0 ? boardB : boardA);
         final ctrl = Offset((pa.dx + pb.dx) / 2 + (pb.dy - pa.dy) * 0.16,
                             (pa.dy + pb.dy) / 2 + (pa.dx - pb.dx) * 0.16);
         final conn = Path()
           ..moveTo(pa.dx, pa.dy)
           ..quadraticBezierTo(ctrl.dx, ctrl.dy, pb.dx, pb.dy);
         _dashedPath(canvas, conn, Paint()
-          ..color = (br.oneWay ? _quantum : _portal)
-              .withValues(alpha: 0.45 + pulseV * 0.25)
+          ..color = connCol.withValues(alpha: 0.4 + pulseV * 0.22)
           ..style = PaintingStyle.stroke
           ..strokeWidth = 2.2
           ..strokeCap = StrokeCap.round);
         if (br.oneWay) {
-          _drawBlackMouth(canvas, pa, cell);
+          _drawBlackMouth(canvas, pa, cell, ring: destA);
           _drawWhiteHole(canvas, pb, cell, pulseV);
         } else {
-          _drawPortal(canvas, pa, cell, pulseV);
-          _drawPortal(canvas, pb, cell, pulseV);
+          _drawPortal(canvas, pa, cell, pulseV, color: destA);
+          _drawPortal(canvas, pb, cell, pulseV, color: destB);
         }
       }
     }
@@ -1820,14 +1826,15 @@ class _PuzzlePainter extends CustomPainter {
     }
   }
 
-  /// The enter-only mouth of a one-way bridge: a small dark well ringed in
-  /// lavender — deliberately unlike the finish black hole's big purple disk.
-  void _drawBlackMouth(Canvas canvas, Offset p, double cell) {
+  /// The enter-only mouth of a one-way bridge: a small dark well ringed in the
+  /// destination universe's colour — deliberately unlike the finish black hole's
+  /// big purple disk.
+  void _drawBlackMouth(Canvas canvas, Offset p, double cell, {Color ring = _quantum}) {
     final r = cell * 0.26;
     canvas.drawCircle(p, r, Paint()..color = const Color(0xff09060f));
     canvas.drawCircle(p, r, Paint()
-      ..color = _quantum.withValues(alpha: 0.85)
-      ..style = PaintingStyle.stroke ..strokeWidth = 2);
+      ..color = ring.withValues(alpha: 0.9)
+      ..style = PaintingStyle.stroke ..strokeWidth = 2.4);
   }
 
   /// The exit-only mouth of a one-way bridge: a radiant white hole ejecting rays.
@@ -1846,25 +1853,26 @@ class _PuzzlePainter extends CustomPainter {
     }
   }
 
-  void _drawPortal(Canvas canvas, Offset pos, double cell, double pulseV) {
+  void _drawPortal(Canvas canvas, Offset pos, double cell, double pulseV,
+      {Color color = _portal}) {
     final r    = cell * 0.34;
     final glow = (0.20 + warp * 0.55 + pulseV * 0.08).clamp(0.0, 1.0);
     canvas.drawCircle(pos, r * (1.5 + warp * 0.6),
-      Paint()..color = _portal.withValues(alpha: glow));
+      Paint()..color = color.withValues(alpha: glow));
     final rot = pulse * 2 * pi;
     for (var k = 0; k < 2; k++) {
       canvas.drawArc(
         Rect.fromCircle(center: pos, radius: r * (0.7 + k * 0.32)),
         rot * (k.isEven ? 1 : -1) + k * pi, pi * 1.2, false,
         Paint()
-          ..color = _portal.withValues(alpha: 0.9)
+          ..color = color.withValues(alpha: 0.9)
           ..style = PaintingStyle.stroke
           ..strokeWidth = 2.5
           ..strokeCap = StrokeCap.round);
     }
     canvas.drawCircle(pos, r * 0.45, Paint()..color = const Color(0xff04141a));
     canvas.drawCircle(pos, r, Paint()
-      ..color = _portal.withValues(alpha: 0.9)
+      ..color = color.withValues(alpha: 0.9)
       ..style = PaintingStyle.stroke ..strokeWidth = 2);
   }
 
