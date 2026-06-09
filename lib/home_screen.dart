@@ -265,14 +265,15 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   }
 
   // ── Dev/test menu: jump straight to a board with a chosen mechanic ─────────
-  void _goDev(Set<PuzzleFeature> features, int level) {
+  void _goDev(Set<PuzzleFeature> features, int level, {int? boards}) {
     AudioService.instance.ui();
     setState(() => _showDev = false);
     Navigator.push(context, MaterialPageRoute(
       builder: (_) => PuzzleScreen(
         mode: PuzzleMode.infinity,
         forceFeatures: features,
-        fixedLevel: level)));
+        fixedLevel: level,
+        multiverseBoards: boards)));
   }
 
   Widget _buildDevOverlay() => Positioned.fill(
@@ -297,7 +298,8 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
             _devBtn('MASS GATE',      {PuzzleFeature.massGate}, 8),
             _devBtn('GRAVITY WELL',   {PuzzleFeature.gravityWell}, 11),
             _devBtn('ENTANGLED PAIR', {PuzzleFeature.entangled}, 8),
-            _devBtn('MULTIVERSE',     {PuzzleFeature.multiverse}, 12),
+            _devBtn('MULTIVERSE ×2',  {PuzzleFeature.multiverse}, 12, boards: 2),
+            _devBtn('MULTIVERSE ×3',  {PuzzleFeature.multiverse}, 12, boards: 3),
             // Entangled and multiverse are exclusive (they reshape the board), so
             // keep them out of the combined set.
             _devBtn('ALL (NO QUANTUM)', {
@@ -327,10 +329,10 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     ),
   );
 
-  Widget _devBtn(String label, Set<PuzzleFeature> f, int level) => Padding(
+  Widget _devBtn(String label, Set<PuzzleFeature> f, int level, {int? boards}) => Padding(
     padding: const EdgeInsets.symmetric(vertical: 5),
     child: GestureDetector(
-      onTap: () => _goDev(f, level),
+      onTap: () => _goDev(f, level, boards: boards),
       child: Container(
         width: 250,
         padding: const EdgeInsets.symmetric(vertical: 13, horizontal: 18),

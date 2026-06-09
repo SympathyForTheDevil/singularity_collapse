@@ -318,8 +318,18 @@ pen across the gap at a bridge, and bridges draw as two-way teal portals or one-
 black-mouth→white-hole pairs (both distinct from the finish black hole). `_canStep`/
 `_onPan` cross a bridge as an atomic teleport (one-way fires only from the black mouth;
 white mouths are entry-blocked). Penrose is forced off in multiverse (combo deferred).
-**Remaining: Phase 3** = 3-board / rectangular boards, difficulty sweep, level-ramp
-integration, tutorial + field-guide entry, dedicated bridge audio, universe labels.
+**Phase 3a (N boards):** generation is now **hub-and-spoke** — board 0 (the hub) is split
+into `boardCount` arcs and each other board (a "spoke") is fully covered between hub arcs
+(A₁ S₁ A₂ S₂ … Aₙ), with 2·(boardCount−1) bridges → covers all cells, ≥1 one-way + ≥1
+two-way, solvable by construction. Generalises the 2-board A→B→A weave. Hub cut points are
+≥2 apart (a 1-cell interior arc would be both a landing and the next mouth — degenerate).
+Board count: 2 (5×5) or 3 (4×4), via `generate(multiverseBoards:)` (dev menu MULTIVERSE
+×2 / ×3) or ~45% random when unset. Each universe has a signature colour (gold/azure/rose,
+`_universeColor`) on its border + panel wash + a roman-numeral label; worldline legs are
+coloured by the universe they **departed from**. Render/input were already N-board-general
+(`_BoardLayout.origins`). **Remaining: Phase 3b** = dedicated bridge audio, tutorial +
+field-guide entry; **Phase 3c** = difficulty sweep + the product call on graduating
+multiverse into normal level progression (currently force-only).
 
 **Hunter mechanic** — shelved. Proven incompatible with fill-every-cell: on every
 Hamiltonian path the player must eventually visit the hunter's cell, making a

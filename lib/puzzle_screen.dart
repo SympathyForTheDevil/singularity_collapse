@@ -19,11 +19,14 @@ class PuzzleScreen extends StatefulWidget {
   /// Dev/test overrides: force a specific feature set and a fixed level.
   final Set<PuzzleFeature>? forceFeatures;
   final int? fixedLevel;
+  /// Dev override: number of stacked boards when forcing multiverse (2 or 3).
+  final int? multiverseBoards;
   const PuzzleScreen({
     super.key,
     this.mode = PuzzleMode.infinity,
     this.forceFeatures,
     this.fixedLevel,
+    this.multiverseBoards,
   });
   @override
   State<PuzzleScreen> createState() => _PuzzleScreenState();
@@ -249,7 +252,8 @@ class _PuzzleScreenState extends State<PuzzleScreen>
     if (!_isDaily && advance) { level++; solvedCount++; }
     final rng = _isDaily ? Random(DailyService.todaySeed()) : null;  // null → fresh random each puzzle
     final lvl = widget.fixedLevel ?? (_isDaily ? DailyService.dailyLevel() : level);
-    grid = PuzzleGrid.generate(lvl, rng: rng, force: widget.forceFeatures);
+    grid = PuzzleGrid.generate(lvl, rng: rng, force: widget.forceFeatures,
+        multiverseBoards: widget.multiverseBoards);
     path
       ..clear()
       ..add(grid.startCell);
@@ -1172,7 +1176,15 @@ class _PuzzlePainter extends CustomPainter {
   static const Color _well    = Color(0xffff5ca8);  // gravity-well magenta
   static const Color _soln    = Color(0xff7fd8ff);  // solution-reveal cyan
   static const Color _quantum = Color(0xffc9b8ff);  // entangled lavender
-  static const Color _universe2 = Color(0xff36d0ff); // multiverse board-2 worldline
+  static const Color _universe2 = Color(0xff36d0ff); // multiverse board-2 (azure)
+  static const Color _universe3 = Color(0xffff79c0); // multiverse board-3 (rose)
+
+  /// Signature colour of a universe (board): gold, azure, rose.
+  Color _universeColor(int board) => switch (board) {
+    0 => accent,
+    1 => _universe2,
+    _ => _universe3,
+  };
 
   _PuzzlePainter({
     required this.grid,
@@ -1285,9 +1297,9 @@ class _PuzzlePainter extends CustomPainter {
       for (var b = 0; b < layout!.origins.length; b++) {
         final o = layout.origins[b];
         // Each universe carries its own tint so the *board* is identifiable even
-        // when the worldline on it is the other universe's colour. Board 2 gets a
-        // faint azure wash on its panel + grid; board 1 stays the default dark.
-        final tint  = b == 1 ? _universe2 : null;
+        // when the worldline on it is another universe's colour. Board 1 stays the
+        // default dark; later boards get a faint signature wash on panel + grid.
+        final tint  = b == 0 ? null : _universeColor(b);
         final panel = tint == null
             ? const Color(0xff070b12)
             : Color.lerp(const Color(0xff070b12), tint, 0.05)!;
@@ -1332,7 +1344,7 @@ class _PuzzlePainter extends CustomPainter {
       }
     }
     Color legColor(int stepIndex) =>
-        mv && originBoard[stepIndex] == 1 ? _universe2 : accent;
+        _universeColor(mv ? originBoard[stepIndex] : 0);
 
     // Filled-cell tint (centre-based → board-aware, coloured by origin universe)
     for (var i = 0; i < path.length; i++) {
@@ -1754,12 +1766,13 @@ class _PuzzlePainter extends CustomPainter {
       final boardPx = n * cell;
       for (var b = 0; b < layout!.origins.length; b++) {
         final o = layout.origins[b];
-        final col = b == 1 ? _universe2 : accent;
+        final col = _universeColor(b);
         canvas.drawRRect(
           RRect.fromRectAndRadius(
             Rect.fromLTWH(o.dx, o.dy, boardPx, boardPx), const Radius.circular(8)),
           Paint()..color = col.withValues(alpha: 0.55)
             ..style = PaintingStyle.stroke ..strokeWidth = 1.8);
+        _drawUniverseLabel(canvas, o, b, cell);
       }
     } else {
       canvas.drawRRect(rrect!, Paint()
@@ -1779,6 +1792,21 @@ class _PuzzlePainter extends CustomPainter {
   /// A deterministic field of distant stars revealed as the region zooms out —
   /// the "this region was one point in a galaxy" beat.
   /// A wormhole portal: swirling teal arcs round a dark core, brightening on warp.
+  /// A small roman numeral in the universe's colour, tucked in the board's
+  /// top-left corner, so each stacked board is identifiable at a glance.
+  void _drawUniverseLabel(Canvas canvas, Offset origin, int board, double cell) {
+    const roman = ['I', 'II', 'III', 'IV'];
+    final tp = TextPainter(
+      text: TextSpan(
+        text: roman[board.clamp(0, roman.length - 1)],
+        style: TextStyle(
+          color: _universeColor(board).withValues(alpha: 0.5),
+          fontSize: (cell * 0.5).clamp(11.0, 22.0),
+          fontFamily: 'monospace', fontWeight: FontWeight.bold)),
+      textDirection: TextDirection.ltr)..layout();
+    tp.paint(canvas, origin + const Offset(7, 4));
+  }
+
   /// Stroke [path] as a dashed line (used for bridge connectors).
   void _dashedPath(Canvas canvas, Path path, Paint paint,
       {double dash = 7, double gap = 6}) {

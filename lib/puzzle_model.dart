@@ -225,13 +225,14 @@ class PuzzleGrid {
   /// [force], when non-null, overrides level-based feature gating: exactly the
   /// listed features are inserted (empty set → a plain board). When null,
   /// features unlock by [level]. Used by the dev menu to test a given mechanic.
-  static PuzzleGrid generate(int level, {Random? rng, Set<PuzzleFeature>? force}) {
+  static PuzzleGrid generate(int level,
+      {Random? rng, Set<PuzzleFeature>? force, int? multiverseBoards}) {
     final r    = rng ?? Random();
 
     // Multiverse reshapes the board into stacked sheets, so it's its own path
     // (force-only MVP, exclusive — never combined with the single-board mechanics).
     if (force?.contains(PuzzleFeature.multiverse) ?? false) {
-      return _generateMultiverse(level, r);
+      return _generateMultiverse(level, r, multiverseBoards);
     }
 
     final size = (5 + level ~/ 3).clamp(5, 8);
@@ -419,43 +420,76 @@ class PuzzleGrid {
   /// construction. One bridge is one-way (Einstein–Rosen: enter the black mouth,
   /// eject the white, no return), the other two-way (a traversable wormhole) —
   /// guaranteeing the mix the mechanic is built around, and a there-and-back weave.
-  static PuzzleGrid _generateMultiverse(int level, Random r) {
-    const size  = 5;
-    const na    = size * size;        // cells per board
-    const total = 2 * na;             // cellCount
+  static PuzzleGrid _generateMultiverse(int level, Random r, int? forcedBoards) {
+    var boardCount = forcedBoards ?? (r.nextDouble() < 0.45 ? 3 : 2);
+    if (boardCount < 2) boardCount = 2;
+    if (boardCount > 3) boardCount = 3;
+    final size  = boardCount >= 3 ? 4 : 5;   // smaller cells when stacking 3
+    final na    = size * size;               // cells per board
+    final total = na * boardCount;           // cellCount
 
-    final a      = _hamiltonian(size, r) ?? _snake(size);        // board 0 (local)
-    final bLocal = _hamiltonian(size, r) ?? _snake(size);        // board 1 (local)
-    final b      = bLocal.map((c) => c + na).toList();           // board 1 (global)
-
-    // Cut board A so the worldline leaves after A₁, fills B, returns for A₂.
-    // i in [1, na-3] keeps the global start (a[0]) and finish (a[na-1]) off the
-    // four bridge mouths.
-    final i = 1 + r.nextInt(na - 3);
-
-    final sol = <int>[
-      ...a.sublist(0, i + 1),   // A₁ = a[0..i]      (ends at mouth a[i])
-      ...b,                     // B  = b[0..na-1]   (land a[i]→b[0]; leave at b[na-1])
-      ...a.sublist(i + 1),      // A₂ = a[i+1..na-1] (land b[na-1]→a[i+1]; end at finish)
+    // Hub-and-spoke weave: board 0 (the "hub") is split into `boardCount` arcs;
+    // each other board (a "spoke") is fully covered between consecutive hub arcs,
+    // entered and left by a bridge → one worldline covering every cell of every
+    // board with 2·(boardCount-1) cross-board jumps (A₁ S₁ A₂ S₂ … A_n). This
+    // generalises the 2-board A→B→A weave; always solvable by construction.
+    final hub = _hamiltonian(size, r) ?? _snake(size);
+    final spokes = <List<int>>[
+      for (var b = 1; b < boardCount; b++)
+        (_hamiltonian(size, r) ?? _snake(size)).map((c) => c + b * na).toList(),
     ];
 
-    // Two bridges; exactly one one-way and one two-way (the mix, guaranteed).
-    final firstOneWay = r.nextBool();
-    final bridges = <Bridge>[
-      Bridge(a[i],      b[0],      firstOneWay),    // A → B  (after A₁)
-      Bridge(b[na - 1], a[i + 1], !firstOneWay),    // B → A  (after B)
-    ];
+    // boardCount-1 hub cut points (sorted) in [1, na-3], every pair ≥2 apart so
+    // each interior hub arc has ≥2 cells — a 1-cell interior arc would be both a
+    // bridge landing AND the next bridge's mouth (degenerate). None land on the
+    // global start (hub[0]) or finish (hub[na-1]).
+    List<int> pickCuts() {
+      for (var attempt = 0; attempt < 200; attempt++) {
+        final pool = [for (var i = 1; i <= na - 3; i++) i]..shuffle(r);
+        final c = (pool.take(boardCount - 1).toList())..sort();
+        var ok = true;
+        for (var j = 1; j < c.length; j++) {
+          if (c[j] - c[j - 1] < 2) { ok = false; break; }
+        }
+        if (ok) return c;
+      }
+      return [for (var j = 0; j < boardCount - 1; j++) 1 + j * 3];
+    }
+    final cuts = pickCuts();
+
+    final sol        = <int>[];
+    final bridges    = <Bridge>[];
+    final mouthCells = <int>{};
+    for (var k = 0; k < boardCount; k++) {
+      final arcStart = k == 0 ? 0 : cuts[k - 1] + 1;
+      final arcEnd   = k < boardCount - 1 ? cuts[k] : na - 1;   // inclusive
+      sol.addAll(hub.sublist(arcStart, arcEnd + 1));
+      if (k < boardCount - 1) {
+        final spoke = spokes[k];
+        bridges.add(Bridge(hub[arcEnd], spoke.first, false));      // hub → spoke
+        mouthCells..add(hub[arcEnd])..add(spoke.first);
+        sol.addAll(spoke);
+        bridges.add(Bridge(spoke.last, hub[cuts[k] + 1], false));  // spoke → hub
+        mouthCells..add(spoke.last)..add(hub[cuts[k] + 1]);
+      }
+    }
+
+    // Assign bridge directions, guaranteeing ≥1 one-way and ≥1 two-way.
+    for (var i = 0; i < bridges.length; i++) {
+      bridges[i] = Bridge(bridges[i].a, bridges[i].b, r.nextBool());
+    }
+    if (!bridges.any((b) => b.oneWay))  bridges[0] = Bridge(bridges[0].a, bridges[0].b, true);
+    if (!bridges.any((b) => !b.oneWay)) bridges[1] = Bridge(bridges[1].a, bridges[1].b, false);
 
     // Milestones: #1 at the global start, Black Hole at the global end, the rest
-    // spread across both boards — never on a bridge mouth.
-    final mouthPos = {i, i + 1, i + na, i + na + 1};   // mouth positions in sol
-    final slen = sol.length;                            // == total
+    // spread across all boards — never on a bridge mouth.
+    final slen = sol.length;                  // == total
     final k = (4 + level ~/ 2).clamp(4, 7);
     final idxSet = <int>{0, slen - 1};
     var guard = 0;
-    while (idxSet.length < k && guard++ < 4000) {
+    while (idxSet.length < k && guard++ < 6000) {
       final p = 1 + r.nextInt(slen - 2);
-      if (!mouthPos.contains(p)) idxSet.add(p);
+      if (!mouthCells.contains(sol[p])) idxSet.add(p);
     }
     final idx = idxSet.toList()..sort();
     final ms = <int, int>{};
@@ -478,7 +512,7 @@ class PuzzleGrid {
     }
     const density = 0.18;
     final walls = <int>{};
-    for (var board = 0; board < 2; board++) {
+    for (var board = 0; board < boardCount; board++) {
       final base = board * na;
       for (var c = 0; c < na; c++) {
         final rr = c ~/ size, ccol = c % size, gc = base + c;
@@ -494,8 +528,8 @@ class PuzzleGrid {
     }
 
     return PuzzleGrid(
-      size: size, boardCount: 2, solution: sol, milestones: ms, walls: walls,
-      bridges: bridges);
+      size: size, boardCount: boardCount, solution: sol, milestones: ms,
+      walls: walls, bridges: bridges);
   }
 
   /// Target branching-difficulty for a level — a smooth ramp. Best-of-N walls

@@ -143,18 +143,21 @@ void main() {
     expect(placed, greaterThan(0));
   });
 
-  test('multiverse: two boards woven by one-way + two-way bridges, solvable', () {
-    for (var seed = 0; seed < 40; seed++) {
+  test('multiverse: N boards woven by one-way + two-way bridges, solvable', () {
+    for (final boards in [2, 3]) {
+    for (var seed = 0; seed < 30; seed++) {
       final g = PuzzleGrid.generate(
-        12, rng: Random(seed), force: {PuzzleFeature.multiverse});
+        12, rng: Random(seed), force: {PuzzleFeature.multiverse},
+        multiverseBoards: boards);
       final na = g.size * g.size;
 
-      // Two boards; the solution covers every cell of both exactly once.
-      expect(g.boardCount, 2);
-      expect(g.cellCount, 2 * na);
+      // Every board is covered exactly once by one continuous solution.
+      expect(g.boardCount, boards);
+      expect(g.cellCount, boards * na);
       expect(g.solution.length, g.cellCount);
       expect(g.solution.toSet().length, g.cellCount);
-      expect(g.solution.map(g.boardOf).toSet(), {0, 1});   // genuinely visits both
+      expect(g.solution.map(g.boardOf).toSet(),
+          {for (var b = 0; b < boards; b++) b});           // visits every board
 
       // Every consecutive step is linked; same-board steps are grid-adjacent and
       // wall-free; cross-board steps are exactly valid bridge initiations.
@@ -190,6 +193,7 @@ void main() {
         if (m != null) { expect(m, seen + 1); seen++; }
       }
       expect(seen, g.milestoneCount);
+    }
     }
   });
 
