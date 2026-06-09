@@ -2,10 +2,10 @@ import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'audio.dart';
 import 'cosmic.dart';
 import 'daily_service.dart';
+import 'field_guide.dart';
 import 'puzzle_model.dart';
 
 enum PuzzleMode { daily, infinity, zen }
@@ -52,9 +52,10 @@ class _PuzzleScreenState extends State<PuzzleScreen>
   late final AnimationController _sling;   // gravity-well launch streak
   late final AnimationController _trace;   // solution-reveal tracer sweep
 
-  bool _seenWormhole = false;              // gate the one-time intro hints
-  bool _seenGate     = false;
-  bool _seenWell     = false;
+  // First-encounter teaching cards. A mechanic is taught once, ever.
+  final Set<String> _seenKeys = {};        // persisted "encountered" flags
+  bool _seenLoaded = false;
+  final List<GuideEntry> _cards = [];       // queued tutorial cards (front = active)
   bool _showSolution = false;              // reveal the answer (playtest / premium)
 
   // Atomic moves (a gravity-well launch or a wormhole teleport) span several
@@ -114,33 +115,39 @@ class _PuzzleScreenState extends State<PuzzleScreen>
   }
 
   Future<void> _loadSeen() async {
-    final p = await SharedPreferences.getInstance();
-    _seenWormhole = p.getBool('seen_wormhole') ?? false;
-    _seenGate     = p.getBool('seen_gate') ?? false;
-    _seenWell     = p.getBool('seen_well') ?? false;
-    if (mounted) _maybeFeatureIntro();
+    _seenKeys.addAll(await GuideService.seen());
+    _seenLoaded = true;
+    if (mounted) _checkTutorials();
   }
 
-  /// First time a new mechanic appears, explain it once (and remember). One
-  /// intro at a time so two new mechanics never collide on the same board.
-  void _maybeFeatureIntro() {
+  /// Queue a teaching card for the Core (first play) and for any mechanic on
+  /// this board the player hasn't met yet — one card each, ever.
+  void _checkTutorials() {
     if (solved) return;
-    if (grid.wormholes.isNotEmpty && !_seenWormhole) {
-      _seenWormhole = true;
-      SharedPreferences.getInstance().then((p) => p.setBool('seen_wormhole', true));
-      _showHint('NEW · WORMHOLE — IN ONE PORTAL, OUT ITS TWIN',
-        duration: const Duration(milliseconds: 4200));
-    } else if (grid.gates.isNotEmpty && !_seenGate) {
-      _seenGate = true;
-      SharedPreferences.getInstance().then((p) => p.setBool('seen_gate', true));
-      _showHint('NEW · MASS GATE — GRAB THE BOSON TO OPEN IT',
-        duration: const Duration(milliseconds: 4200));
-    } else if (grid.wells.isNotEmpty && !_seenWell) {
-      _seenWell = true;
-      SharedPreferences.getInstance().then((p) => p.setBool('seen_well', true));
-      _showHint('NEW · GRAVITY WELL — IT FLINGS YOU; AIM YOUR APPROACH',
-        duration: const Duration(milliseconds: 4200));
+    bool onBoard(String key) => switch (key) {
+      'seen_core'     => true,                       // every puzzle has the core
+      'seen_wormhole' => grid.wormholes.isNotEmpty,
+      'seen_gate'     => grid.gates.isNotEmpty,
+      'seen_well'     => grid.wells.isNotEmpty,
+      _               => false,
+    };
+    for (final card in kTutorialCards) {
+      if (onBoard(card.seenKey) &&
+          !_seenKeys.contains(card.seenKey) &&
+          !_cards.contains(card)) {
+        _cards.add(card);
+      }
     }
+    if (_cards.isNotEmpty) setState(() {});
+  }
+
+  void _dismissCard() {
+    if (_cards.isEmpty) return;
+    final card = _cards.removeAt(0);
+    _seenKeys.add(card.seenKey);
+    GuideService.markSeen(card.seenKey);
+    AudioService.instance.ui();
+    setState(() {});
   }
 
   @override
@@ -162,7 +169,7 @@ class _PuzzleScreenState extends State<PuzzleScreen>
     _timer?.cancel();
     _seconds = 0;
     _timer = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (mounted && !solved && !_paused) setState(() => _seconds++);
+      if (mounted && !solved && !_paused && _cards.isEmpty) setState(() => _seconds++);
     });
   }
 
@@ -192,8 +199,9 @@ class _PuzzleScreenState extends State<PuzzleScreen>
     _atomic.clear();
     _showSolution = false;     // new board → hide any revealed solution
     _trace.stop();
+    _cards.clear();
     _startTimer();
-    _maybeFeatureIntro();
+    if (_seenLoaded) _checkTutorials();
     setState(() {});
   }
 
@@ -399,7 +407,7 @@ class _PuzzleScreenState extends State<PuzzleScreen>
   }
 
   void _onPan(Offset local) {
-    if (solved || _paused) return;
+    if (solved || _paused || _cards.isNotEmpty) return;
     final cell = _cellAt(local);
     if (cell == null || cell == path.last) return;
 
@@ -484,7 +492,7 @@ class _PuzzleScreenState extends State<PuzzleScreen>
 
   /// Tap a visited cell to rewind the worldline to it. Tapping elsewhere does nothing.
   void _onTap(Offset local) {
-    if (solved || _paused) return;
+    if (solved || _paused || _cards.isNotEmpty) return;
     final cell = _cellAt(local);
     if (cell == null) return;
     if (path.contains(cell)) _truncateTo(cell);
@@ -761,6 +769,9 @@ class _PuzzleScreenState extends State<PuzzleScreen>
           // ── Pause overlay — blocks out the entire puzzle ────────────────
           if (_paused) _buildPauseOverlay(),
 
+          // ── First-encounter tutorial card ───────────────────────────────
+          if (_cards.isNotEmpty) _buildTutorialCard(_cards.first),
+
           // ── Share overlay (daily mode, after solve) ─────────────────────
           if (_showShare) _buildShareOverlay(),
         ],
@@ -769,6 +780,53 @@ class _PuzzleScreenState extends State<PuzzleScreen>
   }
 
   /// Fully opaque overlay so the board can't be studied while paused.
+  /// A teaching card shown the first time a mechanic is met. The board stays
+  /// dimly visible behind it so the player can see the real thing.
+  Widget _buildTutorialCard(GuideEntry e) => Positioned.fill(
+    child: Container(
+      color: const Color(0xcc04050a),
+      child: Center(
+        child: Container(
+          margin: const EdgeInsets.symmetric(horizontal: 36),
+          padding: const EdgeInsets.fromLTRB(24, 26, 24, 20),
+          decoration: BoxDecoration(
+            color: const Color(0xff0a1018),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: _accent.withValues(alpha: 0.5), width: 1.5),
+            boxShadow: [BoxShadow(
+              color: _accent.withValues(alpha: 0.15), blurRadius: 30, spreadRadius: 4)],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('NEW',
+                style: TextStyle(
+                  color: Color(0xff6688aa), fontSize: 10, fontFamily: 'monospace',
+                  letterSpacing: 4)),
+              const SizedBox(height: 14),
+              GuideIcon(e.id, size: 64),
+              const SizedBox(height: 14),
+              Text(e.title,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: _accent, fontSize: 18, fontFamily: 'monospace',
+                  fontWeight: FontWeight.bold, letterSpacing: 3,
+                  shadows: [Shadow(color: Color(0x66ffc24d), blurRadius: 12)])),
+              const SizedBox(height: 14),
+              Text(e.body,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: Color(0xffaec4d6), fontSize: 12.5,
+                  fontFamily: 'monospace', height: 1.6)),
+              const SizedBox(height: 24),
+              _overlayBtn('GOT IT', _accent, _dismissCard),
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
+
   Widget _buildPauseOverlay() => Positioned.fill(
     child: Container(
       color: const Color(0xff04050a),

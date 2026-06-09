@@ -79,6 +79,18 @@ Keep everything procedural/asset-free unless deliberately adding a designed
 sample (then update this doc). The reverb setup is wrapped in its own try/catch
 so a filter hiccup never costs the dry audio.
 
+**Tutorial & Field Guide (`lib/field_guide.dart`).** First-encounter teaching:
+the first time the player meets the Core, a Wormhole, a Mass Gate, or a Gravity
+Well, `PuzzleScreen` shows a one-time modal card (`_buildTutorialCard`, queued in
+`_cards`) over the dimmed board; "GOT IT" dismisses and marks it seen. State is
+persisted via `GuideService` (`seen_core/_wormhole/_gate/_well`) — the same flags
+drive the **Field Guide** (`FieldGuideScreen`, book icon top-left on Home): every
+concept/object is listed, but un-encountered entries are blacked out showing
+"UNLOCKS AT LEVEL X" (the mechanic's skill-gate level). To add a mechanic: append
+to `kGuideEntries` (+ `kTutorialCards` if it deserves a card) and add a motif to
+`_GuideIconPainter`. The old transient "NEW · …" hint intros were replaced by these
+cards; `_showHint` is now only for in-context nudges (blocked moves).
+
 **Portrait only.** Locked in `main.dart`. Do not add landscape.
 
 **No state management library.** Plain `StatefulWidget` + `setState`. Keep it that

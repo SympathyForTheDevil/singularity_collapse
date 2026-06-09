@@ -2,6 +2,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'audio.dart';
 import 'daily_service.dart';
+import 'field_guide.dart';
 import 'puzzle_model.dart';
 import 'puzzle_screen.dart';
 
@@ -79,6 +80,27 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       body: SafeArea(
         child: Stack(
           children: [
+            // ── Field Guide (top-left) ──────────────────────────────────────
+            Positioned(
+              top: 8, left: 12,
+              child: GestureDetector(
+                onTap: () {
+                  AudioService.instance.ui();
+                  Navigator.push(context, MaterialPageRoute(
+                    builder: (_) => const FieldGuideScreen()));
+                },
+                child: Container(
+                  width: 40, height: 40,
+                  decoration: BoxDecoration(
+                    color: const Color(0xff0a1018),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: const Color(0xff223344), width: 1),
+                  ),
+                  child: const Icon(Icons.menu_book_rounded,
+                    color: Color(0xff7799aa), size: 20),
+                ),
+              ),
+            ),
             // ── Mute toggle (top-right) ─────────────────────────────────────
             Positioned(
               top: 8, right: 12,
