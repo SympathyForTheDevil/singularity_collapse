@@ -1784,7 +1784,6 @@ class _PuzzlePainter extends CustomPainter {
             Rect.fromLTWH(o.dx, o.dy, boardW, boardH), const Radius.circular(8)),
           Paint()..color = col.withValues(alpha: 0.55)
             ..style = PaintingStyle.stroke ..strokeWidth = 1.8);
-        _drawUniverseLabel(canvas, o, b, cell);
       }
     } else {
       canvas.drawRRect(rrect!, Paint()
@@ -1804,21 +1803,6 @@ class _PuzzlePainter extends CustomPainter {
   /// A deterministic field of distant stars revealed as the region zooms out —
   /// the "this region was one point in a galaxy" beat.
   /// A wormhole portal: swirling teal arcs round a dark core, brightening on warp.
-  /// A small roman numeral in the universe's colour, tucked in the board's
-  /// top-left corner, so each stacked board is identifiable at a glance.
-  void _drawUniverseLabel(Canvas canvas, Offset origin, int board, double cell) {
-    const roman = ['I', 'II', 'III', 'IV'];
-    final tp = TextPainter(
-      text: TextSpan(
-        text: roman[board.clamp(0, roman.length - 1)],
-        style: TextStyle(
-          color: _universeColor(board).withValues(alpha: 0.5),
-          fontSize: (cell * 0.5).clamp(11.0, 22.0),
-          fontFamily: 'monospace', fontWeight: FontWeight.bold)),
-      textDirection: TextDirection.ltr)..layout();
-    tp.paint(canvas, origin + const Offset(7, 4));
-  }
-
   /// Stroke [path] as a dashed line (used for bridge connectors).
   void _dashedPath(Canvas canvas, Path path, Paint paint,
       {double dash = 7, double gap = 6}) {

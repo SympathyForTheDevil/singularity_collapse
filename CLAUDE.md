@@ -331,7 +331,7 @@ space and spread bridge mouths out: `rows × cols` = 5×7 (2 boards) / 4×6 (3 b
 Multiverse generation uses rectangular Hamiltonian helpers (`_hamiltonianRect/_snakeRect/
 _neighRect`); the square helpers are untouched for single-board. `_BoardLayout` is
 rows×cols-aware (shared by painter + input). Each universe has a signature colour
-(gold/azure/rose, `_universeColor`) on its border + panel wash + a roman-numeral label;
+(gold/azure/rose, `_universeColor`) on its border + panel wash;
 worldline legs are coloured by the universe they **departed from**, and each **bridge mouth
 is coloured by the universe it leads TO** (so clustered portals are told apart by
 destination). **Remaining: Phase 3b** = dedicated bridge audio, tutorial +
