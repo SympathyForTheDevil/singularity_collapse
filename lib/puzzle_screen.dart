@@ -1282,16 +1282,29 @@ class _PuzzlePainter extends CustomPainter {
       ..strokeWidth = 1;
     if (mv) {
       final boardPx = n * cell;
-      for (final o in layout!.origins) {
+      for (var b = 0; b < layout!.origins.length; b++) {
+        final o = layout.origins[b];
+        // Each universe carries its own tint so the *board* is identifiable even
+        // when the worldline on it is the other universe's colour. Board 2 gets a
+        // faint azure wash on its panel + grid; board 1 stays the default dark.
+        final tint  = b == 1 ? _universe2 : null;
+        final panel = tint == null
+            ? const Color(0xff070b12)
+            : Color.lerp(const Color(0xff070b12), tint, 0.05)!;
+        final glow  = tint == null
+            ? const Color(0xff142030)
+            : Color.lerp(const Color(0xff142030), tint, 0.30)!;
         canvas.drawRRect(
           RRect.fromRectAndRadius(
             Rect.fromLTWH(o.dx, o.dy, boardPx, boardPx), const Radius.circular(8)),
-          Paint()..color = const Color(0xff070b12));
+          Paint()..color = panel);
+        final gp = Paint()..color = glow
+          ..style = PaintingStyle.stroke ..strokeWidth = 1;
         for (var i = 0; i <= n; i++) {
           canvas.drawLine(Offset(o.dx + i * cell, o.dy),
-                          Offset(o.dx + i * cell, o.dy + boardPx), gridPaint);
+                          Offset(o.dx + i * cell, o.dy + boardPx), gp);
           canvas.drawLine(Offset(o.dx, o.dy + i * cell),
-                          Offset(o.dx + boardPx, o.dy + i * cell), gridPaint);
+                          Offset(o.dx + boardPx, o.dy + i * cell), gp);
         }
       }
     } else {
@@ -1735,20 +1748,23 @@ class _PuzzlePainter extends CustomPainter {
       canvas.drawCircle(tp, cell * 0.09, Paint()..color = Colors.white);
     }
 
-    // Outer border(s) — one per board in multiverse.
-    final borderP = Paint()
-      ..color = accent.withValues(alpha: 0.45)
-      ..style = PaintingStyle.stroke ..strokeWidth = 1.5;
+    // Outer border(s) — one per board in multiverse, tinted by universe (board 2
+    // azure) so each board's identity reads at a glance.
     if (mv) {
       final boardPx = n * cell;
-      for (final o in layout!.origins) {
+      for (var b = 0; b < layout!.origins.length; b++) {
+        final o = layout.origins[b];
+        final col = b == 1 ? _universe2 : accent;
         canvas.drawRRect(
           RRect.fromRectAndRadius(
             Rect.fromLTWH(o.dx, o.dy, boardPx, boardPx), const Radius.circular(8)),
-          borderP);
+          Paint()..color = col.withValues(alpha: 0.55)
+            ..style = PaintingStyle.stroke ..strokeWidth = 1.8);
       }
     } else {
-      canvas.drawRRect(rrect!, borderP);
+      canvas.drawRRect(rrect!, Paint()
+        ..color = accent.withValues(alpha: 0.45)
+        ..style = PaintingStyle.stroke ..strokeWidth = 1.5);
     }
 
     // Close the Penrose tilt, then the collapse transform / fade layer.
