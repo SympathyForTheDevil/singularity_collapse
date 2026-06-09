@@ -1303,19 +1303,44 @@ class _PuzzlePainter extends CustomPainter {
               ..style = PaintingStyle.stroke..strokeWidth = 1.6);
         }
       } else {
-        // The vanished twin: a quick implode (measureT) then a dim void.
+        // The vanished twin: a quick implode (measureT) then a clearly-dead void
+        // — a recessed pit, a *broken* ghost-ring, and a faint ✕ so the player
+        // reads it as "collapsed · cannot step here", not an empty cell.
         final v = center(collapsed);
         final t = measureT;
         if (t > 0 && t < 1) {
-          canvas.drawCircle(v, cell * 0.4 * (1 - t),
+          // Collapse flash: a lavender ring snapping inward as it implodes.
+          canvas.drawCircle(v, cell * 0.42 * (1 - t),
             Paint()..color = _quantum.withValues(alpha: (1 - t) * 0.6)
               ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4));
+          canvas.drawCircle(v, cell * 0.42 * (1 - t * 0.5),
+            Paint()..color = _quantum.withValues(alpha: (1 - t) * 0.5)
+              ..style = PaintingStyle.stroke ..strokeWidth = 2);
         }
-        canvas.drawRRect(
-          RRect.fromRectAndRadius(
-            Rect.fromCenter(center: v, width: cell * 0.7, height: cell * 0.7),
-            const Radius.circular(6)),
-          Paint()..color = const Color(0xff0c0a14));
+        // Recessed dark pit so the cell reads as a hole, not blank space.
+        canvas.drawCircle(v, cell * 0.34, Paint()..color = const Color(0xff09060f));
+        canvas.drawCircle(v, cell * 0.34, Paint()
+          ..color = _quantum.withValues(alpha: 0.16)
+          ..style = PaintingStyle.stroke ..strokeWidth = 1);
+        // Broken (dashed) lavender ghost-ring: residue of the collapsed twin.
+        final rr   = cell * 0.30;
+        final ring = Paint()
+          ..color = _quantum.withValues(alpha: 0.36)
+          ..style = PaintingStyle.stroke ..strokeWidth = 1.5;
+        const dashes = 12;
+        for (var k = 0; k < dashes; k++) {
+          final a0 = (k / dashes) * 2 * pi;
+          canvas.drawArc(Rect.fromCircle(center: v, radius: rr),
+            a0, (2 * pi / dashes) * 0.55, false, ring);
+        }
+        // Faint ✕ — unmistakably "no entry".
+        final xr = cell * 0.15;
+        final xP = Paint()
+          ..color = _quantum.withValues(alpha: 0.42)
+          ..style = PaintingStyle.stroke ..strokeWidth = 1.6
+          ..strokeCap = StrokeCap.round;
+        canvas.drawLine(v + Offset(-xr, -xr), v + Offset(xr, xr), xP);
+        canvas.drawLine(v + Offset(xr, -xr), v + Offset(-xr, xr), xP);
       }
     }
 
@@ -1344,6 +1369,26 @@ class _PuzzlePainter extends CustomPainter {
         ..strokeWidth = cell * 0.28
         ..strokeJoin = StrokeJoin.round
         ..strokeCap = StrokeCap.round);
+    }
+
+    // ── Measured (chosen) twin ───────────────────────────────────────────────
+    // Once superposition collapses, keep the surviving twin marked on top of the
+    // worldline so the player can see which branch they committed to (it would
+    // otherwise be hidden under the trace and lose its quantum identity).
+    if (grid.hasQuantum && collapsedCell >= 0) {
+      final chosen = collapsedCell == grid.quantumCell
+          ? grid.ghostCell : grid.quantumCell;
+      final c = center(chosen);
+      final r = cell * 0.20;
+      canvas.drawCircle(c, r * 1.9,
+        Paint()..color = _quantum.withValues(alpha: 0.20 + pulseV * 0.10)
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3));
+      canvas.drawCircle(c, r, Paint()..color = _quantum.withValues(alpha: 0.9));
+      canvas.drawCircle(c, r, Paint()
+        ..color = Colors.white.withValues(alpha: 0.9)
+        ..style = PaintingStyle.stroke ..strokeWidth = 1.6);
+      canvas.drawCircle(c - Offset(r * 0.3, r * 0.3), r * 0.34,
+        Paint()..color = Colors.white.withValues(alpha: 0.55));
     }
 
     // ── Gravity-well launch streak ───────────────────────────────────────────
