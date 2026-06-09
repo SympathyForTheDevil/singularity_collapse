@@ -29,6 +29,62 @@ class PuzzleScreen extends StatefulWidget {
   State<PuzzleScreen> createState() => _PuzzleScreenState();
 }
 
+/// Gap (px) between stacked boards in the multiverse layout.
+const double _kBoardGap = 18;
+
+/// Where each board of a (possibly multi-board) puzzle sits inside the board
+/// area, and how big its cells are. Boards stack vertically, each square, cell
+/// size maximised to fit the area; the group is centred. Shared by the painter
+/// (render) and the screen (input hit-testing) so they never drift apart.
+class _BoardLayout {
+  final double cell;
+  final List<Offset> origins;   // top-left of each board (length boardCount)
+  final int size;               // per-board grid size
+  final int na;                 // size * size
+  const _BoardLayout(this.cell, this.origins, this.size, this.na);
+
+  static _BoardLayout of(Size area, int boardCount, int size) {
+    final cell = min(
+      area.width / size,
+      (area.height - _kBoardGap * (boardCount - 1)) / boardCount / size,
+    );
+    final boardPx = size * cell;
+    final totalH  = boardPx * boardCount + _kBoardGap * (boardCount - 1);
+    final top  = (area.height - totalH) / 2;
+    final left = (area.width  - boardPx) / 2;
+    return _BoardLayout(cell, [
+      for (var b = 0; b < boardCount; b++)
+        Offset(left, top + b * (boardPx + _kBoardGap)),
+    ], size, size * size);
+  }
+
+  Offset center(int g) {
+    final o = origins[g ~/ na], li = g % na;
+    return Offset(o.dx + (li % size + 0.5) * cell,
+                  o.dy + (li ~/ size + 0.5) * cell);
+  }
+
+  int? cellAt(Offset p) {
+    final boardPx = size * cell;
+    for (var b = 0; b < origins.length; b++) {
+      final lx = p.dx - origins[b].dx, ly = p.dy - origins[b].dy;
+      if (lx < 0 || ly < 0 || lx >= boardPx || ly >= boardPx) continue;
+      final c = (lx / cell).floor().clamp(0, size - 1);
+      final r = (ly / cell).floor().clamp(0, size - 1);
+      return b * na + r * size + c;
+    }
+    return null;
+  }
+
+  /// Fraction (0..1 each axis) of where [p] falls within cell [g], or null if
+  /// [p] isn't on that cell's board. Used by the undo deep-inside gate.
+  Offset? fracInCell(Offset p, int g) {
+    final o = origins[g ~/ na], li = g % na;
+    return Offset((p.dx - o.dx - (li % size) * cell) / cell,
+                  (p.dy - o.dy - (li ~/ size) * cell) / cell);
+  }
+}
+
 class _PuzzleScreenState extends State<PuzzleScreen>
     with TickerProviderStateMixin {
   late PuzzleGrid grid;
@@ -74,6 +130,7 @@ class _PuzzleScreenState extends State<PuzzleScreen>
   int      _nudgeKind   = 0;               // 0 none · 1 black hole · 2 mass gate
 
   double _boardSize = 320;
+  _BoardLayout? _layout;   // board placement (multi-board aware), set each build
 
   static const Color _accent = Color(0xffffc24d);
 
@@ -332,6 +389,11 @@ class _PuzzleScreenState extends State<PuzzleScreen>
     // A wormhole forces a teleport on entry — its twin must be free to land on.
     final twin = grid.wormholeTwin(target);
     if (twin != null && path.contains(twin)) return false;
+    // A multiverse bridge forces a cross-board teleport on entry — its exit must
+    // be free; a one-way white mouth can't be entered by a normal step at all.
+    if (grid.isBridgeEntryBlocked(target)) return false;
+    final bexit = grid.bridgeExitFrom(target);
+    if (bexit != null && path.contains(bexit)) return false;
     return true;
   }
 
@@ -406,7 +468,7 @@ class _PuzzleScreenState extends State<PuzzleScreen>
   /// must be inverse-transformed (un-rotate −45°, un-scale ×√2) before hit-testing
   /// — otherwise the cell you touch wouldn't match the cell you see.
   Offset _boardLocal(Offset p) {
-    if (!_penrose) return p;
+    if (!_penrose || grid.hasMultiverse) return p;   // Penrose is off in multiverse
     final c = _boardSize / 2;
     final v = p - Offset(c, c);
     const a = -pi / 4;
@@ -416,6 +478,7 @@ class _PuzzleScreenState extends State<PuzzleScreen>
   }
 
   int? _cellAt(Offset p) {
+    if (grid.hasMultiverse) return _layout?.cellAt(p);
     final cs = _boardSize / grid.size;
     if (p.dx < 0 || p.dy < 0 || p.dx >= _boardSize || p.dy >= _boardSize) {
       return null;
@@ -432,9 +495,16 @@ class _PuzzleScreenState extends State<PuzzleScreen>
   static const double _undoMargin = 0.34;
 
   bool _deepInside(Offset p, int cell) {
-    final cs = _boardSize / grid.size;
-    final fx = p.dx / cs - grid.colOf(cell);
-    final fy = p.dy / cs - grid.rowOf(cell);
+    final double fx, fy;
+    if (grid.hasMultiverse) {
+      final f = _layout?.fracInCell(p, cell);
+      if (f == null) return false;
+      fx = f.dx; fy = f.dy;
+    } else {
+      final cs = _boardSize / grid.size;
+      fx = p.dx / cs - grid.colOf(cell);
+      fy = p.dy / cs - grid.rowOf(cell);
+    }
     return fx > _undoMargin && fx < 1 - _undoMargin &&
            fy > _undoMargin && fy < 1 - _undoMargin;
   }
@@ -488,6 +558,23 @@ class _PuzzleScreenState extends State<PuzzleScreen>
         path..add(cell)..add(twin);
         _slingFrom = null; _slingTo = null;
         HapticFeedback.mediumImpact();
+        AudioService.instance.warp();
+        _warp.forward(from: 0);
+        if (path.length == grid.fillCount) _onSolved();
+        setState(() {});
+        return;
+      }
+
+      // ── Multiverse bridge crossing ──────────────────────────────────────
+      // Stepping onto a bridge mouth ejects you out the far board (atomic, like a
+      // wormhole). One-way bridges only fire from their black mouth (enforced in
+      // _canStep); two-way fire from either side.
+      final bexit = grid.bridgeExitFrom(cell);
+      if (bexit != null) {
+        _atomic[path.length] = 2;
+        path..add(cell)..add(bexit);
+        _slingFrom = null; _slingTo = null;
+        HapticFeedback.heavyImpact();
         AudioService.instance.warp();
         _warp.forward(from: 0);
         if (path.length == grid.fillCount) _onSolved();
@@ -739,9 +826,17 @@ class _PuzzleScreenState extends State<PuzzleScreen>
                   child: Center(
                     child: LayoutBuilder(
                       builder: (ctx, cons) {
+                        final mv   = grid.hasMultiverse;
                         final side = (min(cons.maxWidth, cons.maxHeight) - 16)
                             .clamp(200.0, 620.0);
+                        // Multiverse uses the full available band (taller than a
+                        // square) so the stacked boards have room to breathe.
+                        final area = mv
+                            ? Size((cons.maxWidth  - 12).clamp(200.0, 640.0),
+                                   (cons.maxHeight -  8).clamp(240.0, 1000.0))
+                            : Size(side, side);
                         _boardSize = side;
+                        _layout    = _BoardLayout.of(area, grid.boardCount, grid.size);
                         return GestureDetector(
                           onTapUp:     (d) => _onTap(d.localPosition),
                           onPanStart:  (d) => _onPan(d.localPosition),
@@ -749,7 +844,7 @@ class _PuzzleScreenState extends State<PuzzleScreen>
                           child: AnimatedBuilder(
                             animation: Listenable.merge([_pulse, _solve, _nudge, _warp, _unlock, _sling, _trace, _measure]),
                             builder: (_, _) => CustomPaint(
-                              size: Size(side, side),
+                              size: area,
                               painter: _PuzzlePainter(
                                 grid: grid,
                                 path: path,
@@ -767,7 +862,7 @@ class _PuzzleScreenState extends State<PuzzleScreen>
                                 collapsedCell: _collapsedCell,
                                 measureT: _measure.value,
                                 accent: _accent,
-                                penrose: _penrose,
+                                penrose: _penrose && !mv,
                               ),
                             ),
                           ),
@@ -1113,12 +1208,18 @@ class _PuzzlePainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
+    final mv     = grid.hasMultiverse;
     final n      = grid.size;
-    final cell   = size.width / n;
+    final layout = mv ? _BoardLayout.of(size, grid.boardCount, n) : null;
+    final cell   = mv ? layout!.cell : size.width / n;
     final pulseV = sin(pulse * 2 * pi) * 0.5 + 0.5;
 
-    Offset center(int i) => Offset(
-      (grid.colOf(i) + 0.5) * cell, (grid.rowOf(i) + 0.5) * cell);
+    // Cell-centre on screen. Multiverse maps through the per-board layout, so a
+    // single `center(globalCell)` works across both boards (and the worldline
+    // naturally lifts the pen across the gap at a bridge).
+    Offset center(int i) => mv
+      ? layout!.center(i)
+      : Offset((grid.colOf(i) + 0.5) * cell, (grid.rowOf(i) + 0.5) * cell);
 
     final bounds   = Offset.zero & size;
     final bhCenter = center(grid.blackHoleCell);
@@ -1171,31 +1272,45 @@ class _PuzzlePainter extends CustomPainter {
       canvas.translate(-c.dx, -c.dy);
     }
 
-    // Board backdrop
-    final rrect = RRect.fromRectAndRadius(
-      Offset.zero & size, const Radius.circular(10));
-    canvas.drawRRect(rrect, Paint()..color = const Color(0xff070b12));
-
-    // Faint cell grid
+    // Board backdrop(s) + faint cell grid. Multiverse draws one dark panel per
+    // board at its layout origin; a single board fills the whole area.
+    RRect? rrect;   // single-board panel (reused for the outer border below)
     final gridPaint = Paint()
       ..color = const Color(0xff142030)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1;
-    for (var i = 0; i <= n; i++) {
-      canvas.drawLine(Offset(i * cell, 0), Offset(i * cell, size.height), gridPaint);
-      canvas.drawLine(Offset(0, i * cell), Offset(size.width, i * cell), gridPaint);
+    if (mv) {
+      final boardPx = n * cell;
+      for (final o in layout!.origins) {
+        canvas.drawRRect(
+          RRect.fromRectAndRadius(
+            Rect.fromLTWH(o.dx, o.dy, boardPx, boardPx), const Radius.circular(8)),
+          Paint()..color = const Color(0xff070b12));
+        for (var i = 0; i <= n; i++) {
+          canvas.drawLine(Offset(o.dx + i * cell, o.dy),
+                          Offset(o.dx + i * cell, o.dy + boardPx), gridPaint);
+          canvas.drawLine(Offset(o.dx, o.dy + i * cell),
+                          Offset(o.dx + boardPx, o.dy + i * cell), gridPaint);
+        }
+      }
+    } else {
+      rrect = RRect.fromRectAndRadius(Offset.zero & size, const Radius.circular(10));
+      canvas.drawRRect(rrect, Paint()..color = const Color(0xff070b12));
+      for (var i = 0; i <= n; i++) {
+        canvas.drawLine(Offset(i * cell, 0), Offset(i * cell, size.height), gridPaint);
+        canvas.drawLine(Offset(0, i * cell), Offset(size.width, i * cell), gridPaint);
+      }
     }
 
-    // Filled-cell tint
+    // Filled-cell tint (centre-based → board-aware)
     final fillPaint = Paint()..color = accent.withValues(alpha: 0.10);
     for (final c in path) {
-      final r = grid.rowOf(c), col = grid.colOf(c);
       canvas.drawRect(
-        Rect.fromLTWH(col * cell + 1.5, r * cell + 1.5, cell - 3, cell - 3),
+        Rect.fromCenter(center: center(c), width: cell - 3, height: cell - 3),
         fillPaint);
     }
 
-    // Walls
+    // Walls — on the shared edge between the two cells (centre-midpoint → board-aware)
     final wallPaint = Paint()
       ..color = const Color(0xff5a6e84)
       ..style = PaintingStyle.stroke
@@ -1204,14 +1319,13 @@ class _PuzzlePainter extends CustomPainter {
     final cc = grid.cellCount;
     for (final key in grid.walls) {
       final lo = key ~/ cc, hi = key % cc;
-      if (hi - lo == 1 && grid.rowOf(lo) == grid.rowOf(hi)) {
-        final x = grid.colOf(hi) * cell;
-        final y = grid.rowOf(lo) * cell;
-        canvas.drawLine(Offset(x, y + 2), Offset(x, y + cell - 2), wallPaint);
-      } else if (hi - lo == n) {
-        final y = grid.rowOf(hi) * cell;
-        final x = grid.colOf(lo) * cell;
-        canvas.drawLine(Offset(x + 2, y), Offset(x + cell - 2, y), wallPaint);
+      final mid = (center(lo) + center(hi)) / 2;
+      if (hi - lo == 1) {                       // horizontal neighbours → vertical wall
+        canvas.drawLine(mid + Offset(0, -cell / 2 + 2),
+                        mid + Offset(0, cell / 2 - 2), wallPaint);
+      } else {                                  // vertical neighbours → horizontal wall
+        canvas.drawLine(mid + Offset(-cell / 2 + 2, 0),
+                        mid + Offset(cell / 2 - 2, 0), wallPaint);
       }
     }
 
@@ -1394,6 +1508,34 @@ class _PuzzlePainter extends CustomPainter {
       }
     }
 
+    // ── Bridges (multiverse) ──────────────────────────────────────────────────
+    // Cross-board links, drawn under the worldline so the trace leaps along them.
+    // Two-way = a calm teal traversable wormhole (portal both ends); one-way = an
+    // Einstein–Rosen bridge: a dark black mouth feeding a radiant white hole.
+    if (mv) {
+      for (final br in grid.bridges) {
+        final pa = center(br.a), pb = center(br.b);
+        final ctrl = Offset((pa.dx + pb.dx) / 2 + (pb.dy - pa.dy) * 0.16,
+                            (pa.dy + pb.dy) / 2 + (pa.dx - pb.dx) * 0.16);
+        final conn = Path()
+          ..moveTo(pa.dx, pa.dy)
+          ..quadraticBezierTo(ctrl.dx, ctrl.dy, pb.dx, pb.dy);
+        _dashedPath(canvas, conn, Paint()
+          ..color = (br.oneWay ? _quantum : _portal)
+              .withValues(alpha: 0.45 + pulseV * 0.25)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 2.2
+          ..strokeCap = StrokeCap.round);
+        if (br.oneWay) {
+          _drawBlackMouth(canvas, pa, cell);
+          _drawWhiteHole(canvas, pb, cell, pulseV);
+        } else {
+          _drawPortal(canvas, pa, cell, pulseV);
+          _drawPortal(canvas, pb, cell, pulseV);
+        }
+      }
+    }
+
     // ── Worldline ──────────────────────────────────────────────────────────
     if (path.length >= 2) {
       final line = Path()..moveTo(center(path.first).dx, center(path.first).dy);
@@ -1562,10 +1704,21 @@ class _PuzzlePainter extends CustomPainter {
       canvas.drawCircle(tp, cell * 0.09, Paint()..color = Colors.white);
     }
 
-    // Outer border
-    canvas.drawRRect(rrect, Paint()
+    // Outer border(s) — one per board in multiverse.
+    final borderP = Paint()
       ..color = accent.withValues(alpha: 0.45)
-      ..style = PaintingStyle.stroke ..strokeWidth = 1.5);
+      ..style = PaintingStyle.stroke ..strokeWidth = 1.5;
+    if (mv) {
+      final boardPx = n * cell;
+      for (final o in layout!.origins) {
+        canvas.drawRRect(
+          RRect.fromRectAndRadius(
+            Rect.fromLTWH(o.dx, o.dy, boardPx, boardPx), const Radius.circular(8)),
+          borderP);
+      }
+    } else {
+      canvas.drawRRect(rrect!, borderP);
+    }
 
     // Close the Penrose tilt, then the collapse transform / fade layer.
     if (penrose)    canvas.restore();
@@ -1579,6 +1732,45 @@ class _PuzzlePainter extends CustomPainter {
   /// A deterministic field of distant stars revealed as the region zooms out —
   /// the "this region was one point in a galaxy" beat.
   /// A wormhole portal: swirling teal arcs round a dark core, brightening on warp.
+  /// Stroke [path] as a dashed line (used for bridge connectors).
+  void _dashedPath(Canvas canvas, Path path, Paint paint,
+      {double dash = 7, double gap = 6}) {
+    for (final metric in path.computeMetrics()) {
+      var d = 0.0;
+      while (d < metric.length) {
+        canvas.drawPath(
+          metric.extractPath(d, min(d + dash, metric.length)), paint);
+        d += dash + gap;
+      }
+    }
+  }
+
+  /// The enter-only mouth of a one-way bridge: a small dark well ringed in
+  /// lavender — deliberately unlike the finish black hole's big purple disk.
+  void _drawBlackMouth(Canvas canvas, Offset p, double cell) {
+    final r = cell * 0.26;
+    canvas.drawCircle(p, r, Paint()..color = const Color(0xff09060f));
+    canvas.drawCircle(p, r, Paint()
+      ..color = _quantum.withValues(alpha: 0.85)
+      ..style = PaintingStyle.stroke ..strokeWidth = 2);
+  }
+
+  /// The exit-only mouth of a one-way bridge: a radiant white hole ejecting rays.
+  void _drawWhiteHole(Canvas canvas, Offset p, double cell, double pulseV) {
+    final r = cell * 0.22;
+    canvas.drawCircle(p, r * 2.0, Paint()
+      ..color = _soln.withValues(alpha: 0.16 + pulseV * 0.10)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6));
+    canvas.drawCircle(p, r, Paint()..color = const Color(0xffeaffff));
+    final ray = Paint()
+      ..color = _soln.withValues(alpha: 0.7)
+      ..strokeWidth = 2 ..strokeCap = StrokeCap.round;
+    for (var k = 0; k < 8; k++) {
+      final a = k * pi / 4, u = Offset(cos(a), sin(a));
+      canvas.drawLine(p + u * (r * 1.2), p + u * (r * 1.9), ray);
+    }
+  }
+
   void _drawPortal(Canvas canvas, Offset pos, double cell, double pulseV) {
     final r    = cell * 0.34;
     final glow = (0.20 + warp * 0.55 + pulseV * 0.08).clamp(0.0, 1.0);

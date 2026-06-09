@@ -297,8 +297,9 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
             _devBtn('MASS GATE',      {PuzzleFeature.massGate}, 8),
             _devBtn('GRAVITY WELL',   {PuzzleFeature.gravityWell}, 11),
             _devBtn('ENTANGLED PAIR', {PuzzleFeature.entangled}, 8),
-            // Entangled is exclusive (it reshapes the solution), so keep it out
-            // of the combined set.
+            _devBtn('MULTIVERSE',     {PuzzleFeature.multiverse}, 12),
+            // Entangled and multiverse are exclusive (they reshape the board), so
+            // keep them out of the combined set.
             _devBtn('ALL (NO QUANTUM)', {
               PuzzleFeature.wormhole, PuzzleFeature.massGate,
               PuzzleFeature.gravityWell,

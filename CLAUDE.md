@@ -200,7 +200,7 @@ one-time `NEW · …` intro hint (persisted via `seen_wormhole` / `seen_gate`).
 `Set<PuzzleFeature>`) overrides it — `null` = auto by level, `{}` = none, e.g.
 `{PuzzleFeature.massGate}` = force that mechanic. This is what the **dev menu**
 (home screen "· dev ·" → NORMAL / WORMHOLE / MASS GATE / GRAVITY WELL /
-ENTANGLED PAIR / ALL (NO QUANTUM)) uses to launch a board with a chosen mechanic
+ENTANGLED PAIR / MULTIVERSE / ALL (NO QUANTUM)) uses to launch a board with a chosen mechanic
 via `PuzzleScreen(forceFeatures:, fixedLevel:)`.
 
 - **Wormhole pairs** (`wormholes`, level ≥ `kWormholeLevel` = 4): two linked
@@ -297,7 +297,8 @@ All four additive mechanics are implemented and dev-menu testable:
 | Gravity wells | ≥ 10 | `PuzzleFeature.gravityWell` | ✅ shipped |
 | Entangled pair | ≥ 13 (placeholder) | `PuzzleFeature.entangled` | ✅ shipped (force-only prototype) |
 
-**Multiverse (stacked boards + bridges)** — in progress. **Phase 1 (engine) shipped:**
+**Multiverse (stacked boards + bridges)** — in progress. **Phases 1–2 shipped** (engine
++ render/input/dev-menu; playable via dev menu → MULTIVERSE).
 `PuzzleFeature.multiverse` (force-only, exclusive; `kMultiverseLevel`=16 placeholder)
 generates **two stacked square boards** (5×5) woven by one continuous worldline that
 crosses **bridges** between them. `PuzzleGrid` is now N-board-general: cell index =
@@ -310,10 +311,15 @@ wormhole crossable either way (`bridgeExitFrom` honours direction). Generation
 as A₁→bridge→B→bridge→A₂ → one path covering all 2N cells with exactly two cross-board
 jumps, guaranteed ≥1 one-way + ≥1 two-way (a there-and-back weave) → solvable by
 construction. Walls are per-board on unused in-board edges. Two widget tests assert it.
-**Remaining: Phase 2** = stacked simultaneous render + bridge visuals (distinct from the
-finish black hole) + input routing + dev-menu entry; **Phase 3** = 3-board / rectangular
-boards, difficulty sweep, tutorial/field-guide, audio. No rendering/input yet — inert
-until Phase 2.
+**Phase 2 (render/input):** the board area becomes a vertical *stack* of both boards,
+laid out by `_BoardLayout` (shared by painter + input so hit-testing never drifts);
+the painter's `center()`/backdrop/grid/walls are board-aware, the worldline lifts the
+pen across the gap at a bridge, and bridges draw as two-way teal portals or one-way
+black-mouth→white-hole pairs (both distinct from the finish black hole). `_canStep`/
+`_onPan` cross a bridge as an atomic teleport (one-way fires only from the black mouth;
+white mouths are entry-blocked). Penrose is forced off in multiverse (combo deferred).
+**Remaining: Phase 3** = 3-board / rectangular boards, difficulty sweep, level-ramp
+integration, tutorial + field-guide entry, dedicated bridge audio, universe labels.
 
 **Hunter mechanic** — shelved. Proven incompatible with fill-every-cell: on every
 Hamiltonian path the player must eventually visit the hunter's cell, making a
