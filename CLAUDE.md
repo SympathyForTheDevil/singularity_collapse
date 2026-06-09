@@ -49,6 +49,15 @@ test/
 along it and only adds walls to edges the solution doesn't use. Every generated
 puzzle is always solvable — never touch the generation without re-running tests.
 
+**Difficulty-authored generation.** Difficulty ≈ *branching*, not board size:
+fewer walls → more open → harder (more choices); more walls → more forced →
+easier. `PuzzleGrid.difficulty` (a `_branching` proxy: excess legal moves along
+the solution) measures it. Generation sweeps wall density (best-of-14) and keeps
+the set whose difficulty is closest to `_difficultyTarget(level)` (a smooth ramp,
+`6 + (level-1)*3.1`, clamped by the board's achievable range). Result: difficulty
+ramps *within* a board size as the level climbs, and is far more consistent
+(spread ~2–6 vs ~8–17 before). The widget test asserts the ramp.
+
 **Black Hole is the finish.** Milestone 1 (Particle) is pinned to the solution's
 first cell; the top milestone (Black Hole) is pinned to the LAST cell. The rule
 engine only allows entering the Black Hole when it is the final remaining cell

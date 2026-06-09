@@ -79,6 +79,37 @@ class PuzzleGrid {
     return lo * n + hi;
   }
 
+  /// Difficulty proxy: total "excess branching" along the solution — at each
+  /// step, how many legal moves the player faced beyond the single correct one.
+  /// 0 = fully forced (trivial); higher = more choices to reason through. More
+  /// walls lower it; an open board raises it.
+  int get difficulty => _branching(solution, milestones, walls, size);
+
+  static int _branching(List<int> sol, Map<int, int> ms, Set<int> walls, int size) {
+    final n  = size * size;
+    final mc = ms.length;
+    final visited = List<bool>.filled(n, false);
+    var msSeen = 0, branch = 0;
+    for (var i = 0; i + 1 < sol.length; i++) {
+      final head = sol[i];
+      visited[head] = true;
+      if (ms.containsKey(head)) msSeen++;
+      var opts = 0;
+      for (final nb in _neigh(head, size)) {
+        if (visited[nb]) continue;
+        if (walls.contains(edgeKey(head, nb, n))) continue;
+        final m = ms[nb];
+        if (m != null) {
+          if (m != msSeen + 1) continue;                 // out-of-order milestone
+          if (m == mc && i + 1 != sol.length - 1) continue; // black hole only last
+        }
+        opts++;
+      }
+      if (opts > 1) branch += opts - 1;
+    }
+    return branch;
+  }
+
   bool hasWall(int a, int b) => walls.contains(edgeKey(a, b, cellCount));
 
   bool adjacent(int a, int b) {
@@ -209,28 +240,51 @@ class PuzzleGrid {
       }
     }
 
-    // Walls on a fraction of edges the solution does NOT use. Only real grid
-    // edges count — the wormhole jump isn't a grid edge, so skip it here.
+    // ── Difficulty-authored walls ────────────────────────────────────────────
+    // Walls go only on edges the solution doesn't use. Fewer walls → more open →
+    // harder (more choices); more walls → more forced → easier. We sweep wall
+    // density and keep the set whose branching-difficulty is closest to the
+    // level's target, so difficulty ramps by cleverness and stays consistent
+    // within a board size — not just by board growth.
     final solEdges = <int>{};
     for (var i = 0; i + 1 < sol.length; i++) {
       if (adj(sol[i], sol[i + 1])) solEdges.add(edgeKey(sol[i], sol[i + 1], n));
     }
-    final walls = <int>{};
-    for (var a = 0; a < n; a++) {
-      final ra = a ~/ size, ca = a % size;
-      if (ca < size - 1) {
-        final key = edgeKey(a, a + 1, n);
-        if (!solEdges.contains(key) && r.nextDouble() < 0.24) walls.add(key);
-      }
-      if (ra < size - 1) {
-        final key = edgeKey(a, a + size, n);
-        if (!solEdges.contains(key) && r.nextDouble() < 0.24) walls.add(key);
-      }
+    final target = _difficultyTarget(level);
+    var walls = <int>{};
+    var bestErr = 1 << 30;
+    const attempts = 14;
+    for (var a = 0; a < attempts; a++) {
+      final density = 0.45 - a * (0.41 / (attempts - 1));   // 0.45 → 0.04
+      final cand = _buildWalls(solEdges, density, size, n, r);
+      final err  = (_branching(sol, ms, cand, size) - target).abs();
+      if (err < bestErr) { bestErr = err; walls = cand; if (err == 0) break; }
     }
 
     return PuzzleGrid(
       size: size, solution: sol, milestones: ms, walls: walls,
       wormholes: wormholes, gates: gates, keys: keys, wells: wells);
+  }
+
+  /// Target branching-difficulty for a level — a smooth ramp. Best-of-N walls
+  /// aim at this; the achievable range is naturally clamped by the board size.
+  static int _difficultyTarget(int level) => (6 + (level - 1) * 3.1).round();
+
+  static Set<int> _buildWalls(
+      Set<int> solEdges, double density, int size, int n, Random r) {
+    final walls = <int>{};
+    for (var a = 0; a < n; a++) {
+      final ra = a ~/ size, ca = a % size;
+      if (ca < size - 1) {
+        final key = edgeKey(a, a + 1, n);
+        if (!solEdges.contains(key) && r.nextDouble() < density) walls.add(key);
+      }
+      if (ra < size - 1) {
+        final key = edgeKey(a, a + size, n);
+        if (!solEdges.contains(key) && r.nextDouble() < density) walls.add(key);
+      }
+    }
+    return walls;
   }
 
   /// Randomized Hamiltonian path via Warnsdorff's heuristic with random restarts.

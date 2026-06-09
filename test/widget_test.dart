@@ -1,8 +1,25 @@
+import 'dart:math';
+
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:singularity_collapse/puzzle_model.dart';
 
 void main() {
+  test('difficulty ramps with level, not just board size', () {
+    double meanDiff(int level) {
+      var sum = 0;
+      for (var s = 0; s < 40; s++) {
+        sum += PuzzleGrid.generate(level, rng: Random(s)).difficulty;
+      }
+      return sum / 40;
+    }
+    // Levels 1 and 2 share a 5x5 board, yet 2 is meaningfully harder.
+    expect(meanDiff(2), greaterThan(meanDiff(1)));
+    // And difficulty keeps climbing across the range.
+    expect(meanDiff(5),  greaterThan(meanDiff(2)));
+    expect(meanDiff(10), greaterThan(meanDiff(5)));
+  });
+
   test('generated puzzles are solvable (cover-all Hamiltonian) and well-formed', () {
     for (var level = 1; level <= 12; level++) {
       final g = PuzzleGrid.generate(level);
