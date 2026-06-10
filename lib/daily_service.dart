@@ -1,8 +1,16 @@
 import 'package:shared_preferences/shared_preferences.dart';
 
+/// Result of recording a daily solve.
+typedef SolveResult = ({int streak, int freezes, bool freezeUsed, bool freezeEarned});
+
 class DailyService {
   static const _keyLastSolved = 'last_solved_date';
   static const _keyStreak     = 'streak';
+  static const _keyFreezes    = 'streak_freezes';
+
+  /// A streak freeze covers one missed day, protecting the streak. You earn one
+  /// every 7 consecutive days, holding at most [maxFreezes].
+  static const int maxFreezes = 2;
 
   static String _fmt(DateTime d) =>
       '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
@@ -34,18 +42,64 @@ class DailyService {
     return prefs.getInt(_keyStreak) ?? 0;
   }
 
-  /// Marks today solved, updates streak, returns new streak value.
-  static Future<int> markSolvedAndGetStreak() async {
-    final prefs     = await SharedPreferences.getInstance();
-    final today     = todayStr();
-    final last      = prefs.getString(_keyLastSolved);
-    if (last == today) return prefs.getInt(_keyStreak) ?? 1;
+  static Future<int> getFreezes() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getInt(_keyFreezes) ?? 0;
+  }
 
-    final yesterday = _fmt(_today().subtract(const Duration(days: 1)));
-    final prev      = prefs.getInt(_keyStreak) ?? 0;
-    final streak    = (last == yesterday) ? prev + 1 : 1;
+  /// Marks today solved and updates the streak + freeze tokens:
+  ///  • consecutive day → streak +1;
+  ///  • missed days, covered by available freezes (1 freeze per missed day) →
+  ///    consume them and keep the streak alive;
+  ///  • otherwise → streak resets to 1.
+  /// A freeze is earned every 7 consecutive days (held up to [maxFreezes]).
+  static Future<SolveResult> markSolvedAndGetStreak() async {
+    final prefs = await SharedPreferences.getInstance();
+    final today = todayStr();
+    var freezes = prefs.getInt(_keyFreezes) ?? 0;
+    final prev  = prefs.getInt(_keyStreak) ?? 0;
+    final last  = prefs.getString(_keyLastSolved);
+
+    if (last == today) {
+      return (streak: prev < 1 ? 1 : prev, freezes: freezes,
+              freezeUsed: false, freezeEarned: false);
+    }
+
+    // Whole missed days between the last solve and today (0 if last == yesterday).
+    var missed = 0;
+    if (last != null) {
+      final p = last.split('-').map(int.parse).toList();
+      final lastUtc  = DateTime.utc(p[0], p[1], p[2]);
+      final n        = _today();
+      final todayUtc = DateTime.utc(n.year, n.month, n.day);
+      missed = todayUtc.difference(lastUtc).inDays - 1;
+    }
+
+    var freezeUsed = false;
+    final int streak;
+    if (last == null || prev == 0) {
+      streak = 1;
+    } else if (missed <= 0) {
+      streak = prev + 1;
+    } else if (missed <= freezes) {
+      freezes -= missed;                 // freeze(s) bridge the gap
+      freezeUsed = true;
+      streak = prev + 1;
+    } else {
+      streak = 1;                        // too many missed days — streak breaks
+    }
+
+    // Earn a freeze every 7 consecutive days, capped.
+    var freezeEarned = false;
+    if (streak % 7 == 0 && freezes < maxFreezes) {
+      freezes += 1;
+      freezeEarned = true;
+    }
+
     await prefs.setString(_keyLastSolved, today);
     await prefs.setInt(_keyStreak, streak);
-    return streak;
+    await prefs.setInt(_keyFreezes, freezes);
+    return (streak: streak, freezes: freezes,
+            freezeUsed: freezeUsed, freezeEarned: freezeEarned);
   }
 }

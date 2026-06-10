@@ -23,6 +23,7 @@ class _StarMapScreenState extends State<StarMapScreen> {
 
   Map<String, int> _medals = {};
   int _streak = 0;
+  int _freezes = 0;
   bool _loaded = false;
 
   @override
@@ -34,7 +35,8 @@ class _StarMapScreenState extends State<StarMapScreen> {
   Future<void> _load() async {
     final m = await ProgressService.all();
     final s = await DailyService.getStreak();
-    if (mounted) setState(() { _medals = m; _streak = s; _loaded = true; });
+    final f = await DailyService.getFreezes();
+    if (mounted) setState(() { _medals = m; _streak = s; _freezes = f; _loaded = true; });
   }
 
   String _fmt(int y, int mo, int d) =>
@@ -99,7 +101,25 @@ class _StarMapScreenState extends State<StarMapScreen> {
               style: const TextStyle(
                 color: Color(0xff99bbcc), fontSize: 12,
                 fontFamily: 'monospace', letterSpacing: 3)),
-            const SizedBox(height: 18),
+            const SizedBox(height: 10),
+
+            // Streak-freeze tokens (❄ filled = available)
+            if (_loaded)
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Text('FREEZE  ', style: TextStyle(
+                    color: Color(0xff5a7488), fontSize: 9,
+                    fontFamily: 'monospace', letterSpacing: 2)),
+                  for (var i = 0; i < DailyService.maxFreezes; i++)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 2),
+                      child: Icon(Icons.ac_unit, size: 14,
+                        color: i < _freezes
+                          ? const Color(0xff7fd8ff) : const Color(0xff223040))),
+                ],
+              ),
+            const SizedBox(height: 16),
 
             // Stat strip
             if (_loaded)

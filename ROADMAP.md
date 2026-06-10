@@ -75,8 +75,11 @@ The engagement engine. Builds on the existing `DailyService` (streak, daily seed
 - ✅ **Star-map constellation** — `StarMapScreen` (home ✨ icon): the current month
   as a 7-wide grid where each solved day is a star coloured by its medal, plus a
   streak / this-month / gold stat strip. Reads `ProgressService.all()`.
-- ☐ **Streak-freeze token** — one "miss a day" forgiveness; earned or granted.
-  Extends `DailyService` streak logic.
+- ✅ **Streak-freeze token** — earn 1 every 7 consecutive days (cap 2); auto-consumed
+  to bridge a missed day so the streak survives. `DailyService.markSolvedAndGetStreak`
+  returns `(streak, freezes, freezeUsed, freezeEarned)`; surfaced in the collapse
+  overlay ("STREAK SAVED · FREEZE USED" / "FREEZE EARNED") and the star-map (❄ tokens).
+  Four unit tests cover the streak/freeze logic.
 - ☐ **Weekly Constellation set** — a 7-day themed run.
 - ☐ **Month navigation** on the star-map (currently current-month only).
 

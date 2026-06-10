@@ -1,11 +1,56 @@
 import 'dart:math';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:singularity_collapse/daily_service.dart';
 import 'package:singularity_collapse/progress_service.dart';
 import 'package:singularity_collapse/puzzle_model.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  // A UTC date string [delta] days from today, in DailyService's format.
+  String dateAgo(int delta) {
+    final d = DateTime.now().toUtc().subtract(Duration(days: delta));
+    return '${d.year}-${d.month.toString().padLeft(2, '0')}-'
+        '${d.day.toString().padLeft(2, '0')}';
+  }
+
+  test('streak: consecutive day increments', () async {
+    SharedPreferences.setMockInitialValues(
+      {'last_solved_date': dateAgo(1), 'streak': 5, 'streak_freezes': 0});
+    final r = await DailyService.markSolvedAndGetStreak();
+    expect(r.streak, 6);
+    expect(r.freezeUsed, isFalse);
+  });
+
+  test('streak: a freeze bridges a missed day', () async {
+    SharedPreferences.setMockInitialValues(
+      {'last_solved_date': dateAgo(2), 'streak': 5, 'streak_freezes': 1});
+    final r = await DailyService.markSolvedAndGetStreak();
+    expect(r.streak, 6);            // preserved
+    expect(r.freezeUsed, isTrue);
+    expect(r.freezes, 0);           // consumed
+  });
+
+  test('streak: a missed day with no freeze breaks the streak', () async {
+    SharedPreferences.setMockInitialValues(
+      {'last_solved_date': dateAgo(2), 'streak': 5, 'streak_freezes': 0});
+    final r = await DailyService.markSolvedAndGetStreak();
+    expect(r.streak, 1);
+    expect(r.freezeUsed, isFalse);
+  });
+
+  test('streak: a freeze is earned at 7 days (capped at 2)', () async {
+    SharedPreferences.setMockInitialValues(
+      {'last_solved_date': dateAgo(1), 'streak': 6, 'streak_freezes': 0});
+    final r = await DailyService.markSolvedAndGetStreak();
+    expect(r.streak, 7);
+    expect(r.freezeEarned, isTrue);
+    expect(r.freezes, 1);
+  });
+
   test('difficulty ramps with level, not just board size', () {
     double meanDiff(int level) {
       var sum = 0;

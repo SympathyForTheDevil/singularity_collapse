@@ -110,6 +110,8 @@ class _PuzzleScreenState extends State<PuzzleScreen>
   bool _showShare  = false;
   bool _backtracked = false;   // any undo/reset this solve → no Gold (daily medals)
   int  _lastMedal   = 0;       // medal earned on the just-finished daily
+  bool _freezeUsed  = false;   // a streak freeze saved the streak this solve
+  bool _freezeEarned = false;  // earned a freeze this solve (7-day milestone)
   bool _paused     = false;
   bool _muted      = AudioService.instance.muted;
   final bool _penrose = ThemeService.penrose;  // 45° spacetime-diagram board skin
@@ -183,14 +185,20 @@ class _PuzzleScreenState extends State<PuzzleScreen>
       ..addStatusListener((s) async {
         if (s == AnimationStatus.completed && mounted) {
           if (_isDaily) {
-            final streak = await DailyService.markSolvedAndGetStreak();
-            final medal  = ProgressService.medalFor(
+            final res   = await DailyService.markSolvedAndGetStreak();
+            final medal = ProgressService.medalFor(
               backtracked: _backtracked,
               seconds: _seconds,
               parSec: ProgressService.parSeconds(grid.cellCount));
             await ProgressService.record(DailyService.todayStr(), medal);
             if (mounted) {
-              setState(() { _streak = streak; _lastMedal = medal; _showShare = true; });
+              setState(() {
+                _streak = res.streak;
+                _freezeUsed = res.freezeUsed;
+                _freezeEarned = res.freezeEarned;
+                _lastMedal = medal;
+                _showShare = true;
+              });
             }
           } else {
             _newPuzzle(advance: true);
@@ -318,6 +326,8 @@ class _PuzzleScreenState extends State<PuzzleScreen>
     _showShare  = false;
     _backtracked = false;
     _lastMedal  = 0;
+    _freezeUsed = false;
+    _freezeEarned = false;
     _clearHint();
     _nudge.reset();
     _warp.reset();
@@ -1153,6 +1163,15 @@ class _PuzzleScreenState extends State<PuzzleScreen>
                   color: Color(0xffbb55ff), fontSize: 12,
                   fontFamily: 'monospace', letterSpacing: 3,
                   shadows: [Shadow(color: Color(0x66bb55ff), blurRadius: 10)])),
+            ],
+            if (_freezeUsed || _freezeEarned) ...[
+              const SizedBox(height: 6),
+              Text(_freezeUsed ? '❄  STREAK SAVED · FREEZE USED'
+                               : '❄  STREAK FREEZE EARNED',
+                style: const TextStyle(
+                  color: Color(0xff7fd8ff), fontSize: 11,
+                  fontFamily: 'monospace', letterSpacing: 2,
+                  shadows: [Shadow(color: Color(0x667fd8ff), blurRadius: 10)])),
             ],
 
             const SizedBox(height: 28),
