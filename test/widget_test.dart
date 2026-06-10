@@ -2,6 +2,7 @@ import 'dart:math';
 
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:singularity_collapse/progress_service.dart';
 import 'package:singularity_collapse/puzzle_model.dart';
 
 void main() {
@@ -219,6 +220,19 @@ void main() {
       }
     }
     expect(entangledSeen, greaterThan(15));
+  });
+
+  test('daily medals: gold = clean, silver = under par, bronze = solved', () {
+    const par = 50;
+    // Gold for a clean (no-backtrack) solve, regardless of time.
+    expect(ProgressService.medalFor(backtracked: false, seconds: 999, parSec: par),
+        ProgressService.gold);
+    // Silver: backtracked but under par.
+    expect(ProgressService.medalFor(backtracked: true, seconds: 40, parSec: par),
+        ProgressService.silver);
+    // Bronze: backtracked and over par.
+    expect(ProgressService.medalFor(backtracked: true, seconds: 80, parSec: par),
+        ProgressService.bronze);
   });
 
   test('forced features appear regardless of level', () {

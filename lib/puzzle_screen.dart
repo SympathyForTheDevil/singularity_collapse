@@ -6,6 +6,7 @@ import 'audio.dart';
 import 'cosmic.dart';
 import 'daily_service.dart';
 import 'field_guide.dart';
+import 'progress_service.dart';
 import 'puzzle_model.dart';
 import 'theme_service.dart';
 
@@ -107,6 +108,8 @@ class _PuzzleScreenState extends State<PuzzleScreen>
   int  solvedCount = 0;
   bool solved      = false;
   bool _showShare  = false;
+  bool _backtracked = false;   // any undo/reset this solve → no Gold (daily medals)
+  int  _lastMedal   = 0;       // medal earned on the just-finished daily
   bool _paused     = false;
   bool _muted      = AudioService.instance.muted;
   final bool _penrose = ThemeService.penrose;  // 45° spacetime-diagram board skin
@@ -181,7 +184,14 @@ class _PuzzleScreenState extends State<PuzzleScreen>
         if (s == AnimationStatus.completed && mounted) {
           if (_isDaily) {
             final streak = await DailyService.markSolvedAndGetStreak();
-            if (mounted) setState(() { _streak = streak; _showShare = true; });
+            final medal  = ProgressService.medalFor(
+              backtracked: _backtracked,
+              seconds: _seconds,
+              parSec: ProgressService.parSeconds(grid.cellCount));
+            await ProgressService.record(DailyService.todayStr(), medal);
+            if (mounted) {
+              setState(() { _streak = streak; _lastMedal = medal; _showShare = true; });
+            }
           } else {
             _newPuzzle(advance: true);
           }
@@ -304,8 +314,10 @@ class _PuzzleScreenState extends State<PuzzleScreen>
     path
       ..clear()
       ..add(grid.startCell);
-    solved     = false;
-    _showShare = false;
+    solved      = false;
+    _showShare  = false;
+    _backtracked = false;
+    _lastMedal  = 0;
     _clearHint();
     _nudge.reset();
     _warp.reset();
@@ -326,6 +338,7 @@ class _PuzzleScreenState extends State<PuzzleScreen>
     path
       ..clear()
       ..add(grid.startCell);
+    _backtracked = true;
     _clearHint();
     _warp.reset();   // portals back to their idle look
     _unlock.reset();
@@ -349,6 +362,7 @@ class _PuzzleScreenState extends State<PuzzleScreen>
     } else {
       path.removeLast();
     }
+    _backtracked = true;
     _clearHint();
     HapticFeedback.selectionClick();
     setState(() {});
@@ -364,6 +378,7 @@ class _PuzzleScreenState extends State<PuzzleScreen>
     if (i < 0) return;
     path.removeRange(i + 1, path.length);
     _atomic.removeWhere((s, len) => s > i);
+    _backtracked = true;
     _clearHint();
     HapticFeedback.selectionClick();
     setState(() {});
@@ -577,6 +592,7 @@ class _PuzzleScreenState extends State<PuzzleScreen>
       // during forward motion is ignored.
       if (_deepInside(local, cell)) {
         path.removeLast();
+        _backtracked = true;
         _clearHint();
         HapticFeedback.selectionClick();
         setState(() {});
@@ -722,6 +738,10 @@ class _PuzzleScreenState extends State<PuzzleScreen>
     final buf     = StringBuffer()
       ..writeln('Singularity: Collapse')
       ..writeln('Daily Region $today ✅');
+    if (_lastMedal > 0) {
+      const emoji = ['', '🥉', '🥈', '🥇'];
+      buf.writeln('${emoji[_lastMedal]} ${ProgressService.medalName[_lastMedal]}');
+    }
     if (_timed) buf.writeln('Time: ${_formatTime(_seconds)}');
     if (_streak > 0) buf.writeln('Streak 🔥 $_streak');
     buf.writeln();
@@ -1070,6 +1090,35 @@ class _PuzzleScreenState extends State<PuzzleScreen>
     ),
   );
 
+  // Daily medal palette: —, Bronze, Silver, Gold.
+  static const List<Color> _medalColors = [
+    Color(0xff8899aa), Color(0xffcd7f32), Color(0xffc8d2dc), Color(0xffffc24d),
+  ];
+
+  Widget _medalBadge(int medal) {
+    final c = _medalColors[medal];
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(medal == ProgressService.gold
+              ? Icons.workspace_premium : Icons.military_tech,
+          color: c, size: 44,
+          shadows: [Shadow(color: c.withValues(alpha: 0.6), blurRadius: 16)]),
+        const SizedBox(height: 4),
+        Text(ProgressService.medalName[medal],
+          style: TextStyle(
+            color: c, fontSize: 16, fontFamily: 'monospace',
+            fontWeight: FontWeight.bold, letterSpacing: 3,
+            shadows: [Shadow(color: c.withValues(alpha: 0.5), blurRadius: 12)])),
+        const SizedBox(height: 3),
+        Text(ProgressService.medalNote[medal],
+          style: const TextStyle(
+            color: Color(0xff8aa6bc), fontSize: 9,
+            fontFamily: 'monospace', letterSpacing: 2)),
+      ],
+    );
+  }
+
   Widget _buildShareOverlay() {
     final shareText = _buildShareText();
     return Container(
@@ -1083,6 +1132,11 @@ class _PuzzleScreenState extends State<PuzzleScreen>
                 color: Colors.white, fontSize: 22, fontFamily: 'monospace',
                 fontWeight: FontWeight.bold, letterSpacing: 4,
                 shadows: [Shadow(color: Color(0xffbb55ff), blurRadius: 20)])),
+
+            if (_isDaily && _lastMedal > 0) ...[
+              const SizedBox(height: 16),
+              _medalBadge(_lastMedal),
+            ],
 
             if (_timed && _seconds > 0) ...[
               const SizedBox(height: 6),
