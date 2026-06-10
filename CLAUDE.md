@@ -119,11 +119,23 @@ through a global Freeverb send for a cosmic space:
   `_renderPiece` through a soft music-box/celesta voice (`_addVoice`) into **one
   seamlessly-looping buffer** — each note's decaying tail **wraps around** the
   buffer end (modular indexing) so the loop has no click/gap/tempo-drift. Tracks
-  are **lazily** synthesized on first selection and cached (`_music` map), play
-  **app-wide** (independent of any screen, via `_musicHandle`, `setProtectVoice`),
-  and **duck the ambient pad** to `_padTarget*0.5` so the melody sits on top.
-  Selection + volume persist (`music_track`/`music_volume`); resumed on launch;
-  silenced by mute. Catalogue = `kMusicTracks` (`MusicTrack` id→title→composer),
+  are **lazily** synthesized on first selection and cached (`_music` map), and
+  **duck the ambient pad** to `_padTarget*0.5` so the melody sits on top.
+  **Scoped to gameplay, not the menu:** music plays only while a *music context*
+  is active — a game mode (`PuzzleScreen`) or the Settings preview call
+  `enterMusicContext()`/`exitMusicContext()` in init/dispose; the home menu is
+  silent. `_updateMusic()` is the single gate (context && track && !muted &&
+  !backgrounded → start, else stop). The **pause menu** has a MUSIC ON/OFF button
+  (`_toggleMusic` → `setTrack('')` or `setTrack(lastTrack)`); `_lastTrack`
+  (persisted `music_last_track`) lets it resume the player's last pick.
+  **Backgrounding:** `AudioService` is a `WidgetsBindingObserver` —
+  `didChangeAppLifecycleState` `setPause`s the pad + music handles on
+  paused/hidden and resumes on resumed (so audio doesn't play behind a locked
+  screen / in the app switcher). Selection + volume persist
+  (`music_track`/`music_volume`); silenced by mute. **Future hook:** tracks could
+  be unlock-gated (achievement / premium) — gate `kMusicTracks` entries in the
+  Settings picker like the Quantum picker's `seen_*` gating. Catalogue =
+  `kMusicTracks` (`MusicTrack` id→title→composer),
   each id mapped to a builder in `_pieceFor`. Per-piece voice envelope on
   `_MusicPiece` (melody/bass decay + ring): plucky music-box (Bach) vs legato
   (Satie). **Shipped:** Bach — Prelude in C (BWV 846, mm. 1–4, I→ii⁷→V⁷→I

@@ -28,6 +28,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _muted  = a.muted;
     _track  = a.musicTrack;
     _volume = a.musicVolume;
+    a.enterMusicContext();   // preview the soundtrack while on this screen
+  }
+
+  @override
+  void dispose() {
+    AudioService.instance.exitMusicContext();   // no music back on the menu
+    super.dispose();
   }
 
   Future<void> _toggleSound() async {

@@ -1,6 +1,7 @@
 import 'dart:math';
+import 'dart:typed_data';
 
-import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_soloud/flutter_soloud.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -37,7 +38,7 @@ const List<MusicTrack> kMusicTracks = [
 /// *synthesized* the same way as everything else (no audio assets, no recording
 /// licensing) — note data → a soft music-box voice → one seamless looping buffer.
 /// On-theme nod: Game Boy Tetris's "Music B" was itself a chiptune Bach minuet.
-class AudioService {
+class AudioService with WidgetsBindingObserver {
   AudioService._();
   static final AudioService instance = AudioService._();
 
@@ -63,16 +64,28 @@ class AudioService {
   AudioSource? _pad;
   SoundHandle? _padHandle;
 
-  // Music — a looping classical soundtrack, synthesized lazily on first use.
+  // Music — a looping classical soundtrack, synthesized lazily on first use. It
+  // plays only while a "music context" is active (a game mode, or the settings
+  // preview) — never on the main menu — and pauses when the app is backgrounded.
   final Map<String, AudioSource> _music = {};   // id → rendered loop
   SoundHandle? _musicHandle;
-  String _musicTrack  = '';        // '' = none/off
+  bool _musicContext  = false;     // a game / settings screen is active
+  bool _backgrounded  = false;     // app is in the background (lock / app switch)
+  bool _musicStarting = false;     // guard against overlapping async starts
+  String _musicTrack  = '';        // current track id ('' = off)
+  String _lastTrack   = '';        // last non-empty pick (for the pause toggle)
   double _musicVolume = 0.7;       // 0..1, user setting
   double _padTarget   = 0;         // current ambient-pad fade target (for ducking)
-  static const _musicKey    = 'music_track';
-  static const _musicVolKey = 'music_volume';
+  static const _musicKey     = 'music_track';
+  static const _lastTrackKey = 'music_last_track';
+  static const _musicVolKey  = 'music_volume';
   String get musicTrack  => _musicTrack;
   double get musicVolume => _musicVolume;
+  /// The track the pause-menu "music on" should resume — the last real pick, or
+  /// the first catalogue entry if the player has never chosen one.
+  String get lastTrack => _lastTrack.isNotEmpty
+      ? _lastTrack
+      : (kMusicTracks.isNotEmpty ? kMusicTracks.first.id : '');
 
   // ── Lifecycle ──────────────────────────────────────────────────────────────
   Future<void> init() async {
@@ -81,7 +94,9 @@ class AudioService {
       final prefs = await SharedPreferences.getInstance();
       _muted       = prefs.getBool(_muteKey) ?? false;
       _musicTrack  = prefs.getString(_musicKey) ?? '';
+      _lastTrack   = prefs.getString(_lastTrackKey) ?? '';
       _musicVolume = prefs.getDouble(_musicVolKey) ?? 0.7;
+      WidgetsBinding.instance.addObserver(this);   // pause audio in background
 
       await _soloud.init(sampleRate: _sr, channels: Channels.stereo);
 
@@ -100,7 +115,7 @@ class AudioService {
 
       await _buildSounds();
       _ready = true;
-      if (_musicTrack.isNotEmpty) _startMusic();   // resume the saved soundtrack
+      // Music starts only when a game/settings screen calls enterMusicContext().
     } catch (e) {
       debugPrint('Audio: init failed, continuing silently ($e)');
       _ready = false;
@@ -109,12 +124,8 @@ class AudioService {
 
   Future<void> setMuted(bool value) async {
     _muted = value;
-    if (value) {
-      stopAmbient();
-      _stopMusic();
-    } else if (_musicTrack.isNotEmpty) {
-      _startMusic();
-    }
+    if (value) stopAmbient();
+    _updateMusic();
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_muteKey, value);
   }
@@ -207,14 +218,23 @@ class AudioService {
   }
 
   // ── Music (classical soundtrack) ─────────────────────────────────────────────
-  /// Select a track by id ('' = off). Synthesizes it on first use, then loops it
-  /// app-wide. Persisted; resumed on next launch.
+  /// A music-enabled screen (a game mode, or the settings preview) became active
+  /// — start the soundtrack. There is deliberately no music on the main menu.
+  void enterMusicContext() { _musicContext = true; _updateMusic(); }
+
+  /// Left the music-enabled screen — stop the soundtrack.
+  void exitMusicContext() { _musicContext = false; _updateMusic(); }
+
+  /// Select a track ('' = off). Remembers the last real pick so the pause-menu
+  /// toggle can resume it. Persisted; previews immediately if a context is active.
   Future<void> setTrack(String id) async {
     _musicTrack = id;
+    if (id.isNotEmpty) _lastTrack = id;
+    _stopMusic();            // swap cleanly before (maybe) starting the new one
+    _updateMusic();
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_musicKey, id);
-    _stopMusic();
-    if (id.isNotEmpty) await _startMusic();
+    if (id.isNotEmpty) await prefs.setString(_lastTrackKey, id);
   }
 
   Future<void> setMusicVolume(double v) async {
@@ -225,10 +245,31 @@ class AudioService {
     await prefs.setDouble(_musicVolKey, _musicVolume);
   }
 
+  /// Start or stop the loop to match the current state: a track is chosen, a
+  /// music context is active, audio isn't muted, and the app is foregrounded.
+  void _updateMusic() {
+    if (_ready && !_muted && !_backgrounded &&
+        _musicContext && _musicTrack.isNotEmpty) {
+      _startMusic();
+    } else {
+      _stopMusic();
+    }
+  }
+
   Future<void> _startMusic() async {
-    if (!_ready || _muted || _musicTrack.isEmpty || _musicHandle != null) return;
+    if (_musicHandle != null || _musicStarting) return;
+    if (!_ready || _muted || _backgrounded ||
+        !_musicContext || _musicTrack.isEmpty) {
+      return;
+    }
+    _musicStarting = true;
     final src = await _ensureTrack(_musicTrack);
-    if (src == null || _musicHandle != null) return;
+    _musicStarting = false;
+    // Conditions may have changed during the async synth — re-check before play.
+    if (src == null || _musicHandle != null || !_ready || _muted ||
+        _backgrounded || !_musicContext || _musicTrack.isEmpty) {
+      return;
+    }
     final h = _soloud.play(src, volume: 0, looping: true);
     _musicHandle = h;
     _soloud.setProtectVoice(h, true);
@@ -246,7 +287,7 @@ class AudioService {
     if (!_ready) return;
     _soloud.fadeVolume(h, 0, const Duration(milliseconds: 600));
     _soloud.schedulePause(h, const Duration(milliseconds: 650));
-    final pad = _padHandle;          // restore the pad to full bed level
+    final pad = _padHandle;          // restore the pad to its full bed level
     if (pad != null) {
       _soloud.fadeVolume(pad, _padTarget, const Duration(milliseconds: 900));
     }
@@ -261,6 +302,31 @@ class AudioService {
     final src = await _load('music_$id', _renderPiece(piece));
     _music[id] = src;
     return src;
+  }
+
+  // ── App lifecycle: silence all audio in the background (lock / app switch) ────
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    final bg = state == AppLifecycleState.paused ||
+               state == AppLifecycleState.hidden;
+    final fg = state == AppLifecycleState.resumed;
+    if (bg && !_backgrounded) {
+      _backgrounded = true;
+      _applyBackground();
+    } else if (fg && _backgrounded) {
+      _backgrounded = false;
+      _applyBackground();
+    }
+    // inactive / detached: transient — leave audio as-is.
+  }
+
+  /// Pause (or resume) the continuous loops so nothing plays behind a locked
+  /// screen or in the app switcher. Handles are kept → instant resume, no resynth.
+  void _applyBackground() {
+    if (!_ready) return;
+    for (final h in [_padHandle, _musicHandle]) {
+      if (h != null) _soloud.setPause(h, _backgrounded);
+    }
   }
 
   // ── Sound construction ─────────────────────────────────────────────────────

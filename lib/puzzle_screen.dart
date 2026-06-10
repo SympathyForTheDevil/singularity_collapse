@@ -260,6 +260,7 @@ class _PuzzleScreenState extends State<PuzzleScreen>
     _newPuzzle();
     _loadSeen();
     AudioService.instance.startAmbient(calm: !_timed);
+    AudioService.instance.enterMusicContext();   // soundtrack plays in-game only
   }
 
   Future<void> _loadSeen() async {
@@ -303,6 +304,7 @@ class _PuzzleScreenState extends State<PuzzleScreen>
   @override
   void dispose() {
     AudioService.instance.stopAmbient();
+    AudioService.instance.exitMusicContext();   // stop the soundtrack on the menu
     _timer?.cancel();
     _hintTimer?.cancel();
     _hintCellsTimer?.cancel();
@@ -798,6 +800,14 @@ class _PuzzleScreenState extends State<PuzzleScreen>
     AudioService.instance.ui();   // audible only when now un-muted — a confirm
   }
 
+  /// Stop the soundtrack, or resume the last-chosen piece — from the pause menu.
+  Future<void> _toggleMusic() async {
+    final a = AudioService.instance;
+    AudioService.instance.ui();
+    await a.setTrack(a.musicTrack.isNotEmpty ? '' : a.lastTrack);
+    if (mounted) setState(() {});
+  }
+
   /// Reveal / hide the solved path. Playtest aid now; the hook for a premium
   /// "show solution" later. Does not change the puzzle state — just an overlay.
   void _toggleSolution() {
@@ -1208,6 +1218,10 @@ class _PuzzleScreenState extends State<PuzzleScreen>
             const SizedBox(height: 12),
             _overlayBtn(_muted ? 'UNMUTE' : 'MUTE', const Color(0xff7799aa),
               _toggleMute),
+            const SizedBox(height: 12),
+            _overlayBtn(
+              AudioService.instance.musicTrack.isNotEmpty ? 'MUSIC OFF' : 'MUSIC ON',
+              const Color(0xff7799aa), _toggleMusic),
             const SizedBox(height: 12),
             _overlayBtn('HOME', const Color(0xff7799aa),
               () => Navigator.pop(context)),
