@@ -17,13 +17,17 @@ Cheap changes that improve feel and tidy the project before any store push.
   difficulty-sweep target (`_multiverseTarget`) is a first guess. Playtest 2- and
   3-board boards; tune cols/rows and the target so first encounters (L16/L26) feel
   guided, not punishing.
-- ☐ **Quantum low-stage board size.** Early Quantum stages are 5×5, so additive
-  combos (wormhole+gate+well) don't always fit. Option: give Quantum a roomier
-  floor (e.g. start size ≥6) so chosen mechanics reliably appear.
+- ✅ **Quantum low-stage board size.** A multi-mechanic Quantum board now floors
+  the generation level (→ board size) by how many mechanics it forces: 2 → ≥6×6,
+  3 → ≥7×7, so combos reliably fit. Single-mechanic / plain boards stay small.
 - ☐ **Entangled frequency tuning.** It now auto-spawns (~14%/level after 13);
-  confirm it doesn't feel too frequent/rare.
-- ☐ **Housekeeping:** delete `design_bridge_options.html` (scratch); gate or remove
-  the `· dev ·` menu before a public build; set a real `pubspec.yaml` `description`.
+  *needs on-device playtest* to confirm it doesn't feel too frequent/rare.
+- ◐ **Multiverse difficulty/length.** Dimensions look good (per screenshots); the
+  ~70-cell length + sweep target are *playtest-dependent* — hold until there's feel
+  feedback rather than guessing.
+- ✅ **Housekeeping:** deleted `design_bridge_options.html`; set a real
+  `pubspec.yaml` `description`. (`· dev ·` menu kept for now — still needed for
+  testing; gate/remove right before a public build.)
 
 **Effort:** small. **Why first:** improves the experience everything else builds on.
 

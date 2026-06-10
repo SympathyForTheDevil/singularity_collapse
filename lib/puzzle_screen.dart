@@ -266,7 +266,7 @@ class _PuzzleScreenState extends State<PuzzleScreen>
   void _newPuzzle({bool advance = false}) {
     if (!_isDaily && advance) { level++; solvedCount++; }
     final rng = _isDaily ? Random(DailyService.todaySeed()) : null;  // null → fresh random each puzzle
-    final lvl = widget.fixedLevel ?? (_isDaily ? DailyService.dailyLevel() : level);
+    var lvl = widget.fixedLevel ?? (_isDaily ? DailyService.dailyLevel() : level);
 
     // Quantum mode: each board rolls one "recipe" from the player's chosen types
     // — a plain board, a single exclusive mechanic (entangled/multiverse come
@@ -293,6 +293,11 @@ class _PuzzleScreenState extends State<PuzzleScreen>
       ];
       force = recipes.isEmpty ? <PuzzleFeature>{} : recipes[rnd.nextInt(recipes.length)]();
       if (force.contains(PuzzleFeature.multiverse)) mvBoards = rnd.nextBool() ? 3 : 2;
+      // Give multi-mechanic boards enough room to actually place everything (a
+      // 5×5 can't fit a wormhole + gate + well). Floor the generation level — and
+      // thus the board size — by how many mechanics this board is forcing.
+      final floor = force.length >= 3 ? 6 : (force.length == 2 ? 3 : 0);
+      if (lvl < floor) lvl = floor;
     }
 
     grid = PuzzleGrid.generate(lvl, rng: rng, force: force, multiverseBoards: mvBoards);

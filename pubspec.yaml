@@ -1,5 +1,5 @@
 name: singularity_collapse
-description: "A new Flutter project."
+description: "Singularity: Collapse — a cosmic line-drawing puzzle. Trace one worldline that consumes objects in ascending mass order and fills every cell; reaching the black hole collapses the region into a larger one."
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
