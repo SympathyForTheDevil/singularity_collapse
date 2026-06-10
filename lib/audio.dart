@@ -17,6 +17,7 @@ class MusicTrack {
 /// maps to a `_pieceFor` builder in [AudioService].
 const List<MusicTrack> kMusicTracks = [
   MusicTrack('bach_prelude', 'Prelude in C', 'J.S. Bach'),
+  MusicTrack('satie_gymnopedie', 'Gymnopédie No. 1', 'Erik Satie'),
 ];
 
 /// All game audio. Hybrid design:
@@ -509,6 +510,8 @@ class AudioService {
     switch (id) {
       case 'bach_prelude':
         return _bachPreludeInC();
+      case 'satie_gymnopedie':
+        return _satieGymnopedie();
       default:
         return null;
     }
@@ -519,30 +522,31 @@ class AudioService {
   /// loop point rings on into the next iteration exactly as in a real performance
   /// — no clicks, no gap, no tempo drift.
   Float64List _renderPiece(_MusicPiece p) {
-    final spb     = 60.0 / p.bpm;                 // seconds per beat
-    final loopSec = p.loopBeats * spb;
-    final out     = _alloc(loopSec);
+    final spb = 60.0 / p.bpm;                     // seconds per beat
+    final out = _alloc(p.loopBeats * spb);
     for (final n in p.notes) {
       if (n.midi < 0) continue;                   // rest
       final freq  = 440.0 * pow(2, (n.midi - 69) / 12.0).toDouble();
       final start = (n.start * spb * _sr).round();
-      _addVoice(out, start, freq, bass: n.bass, vel: n.vel);
+      _addVoice(out, start, freq, bass: n.bass, vel: n.vel,
+        decay: n.bass ? p.bassDecay : p.melodyDecay,
+        ring:  n.bass ? p.bassRing  : p.melodyRing);
     }
     return out;
   }
 
-  /// Add one plucked, music-box/celesta voice (or a softer, longer bass voice)
-  /// into [out] starting at [startSample], wrapping its decaying tail around the
-  /// buffer so the loop stays seamless.
+  /// Add one music-box/celesta voice (or a softer, deeper bass voice) into [out]
+  /// starting at [startSample] — soft attack, exponential decay over [ring]
+  /// seconds at rate [decay] (plucky = high decay/short ring; legato = low decay/
+  /// long ring). The decaying tail wraps around the buffer so the loop is seamless.
   void _addVoice(Float64List out, int startSample, double freq,
-      {required bool bass, required double vel}) {
+      {required bool bass, required double vel,
+       required double decay, required double ring}) {
     final n = out.length;
     if (n == 0) return;
-    final decay = bass ? 2.2 : 4.0;               // exp decay rate (pluck)
-    final ring  = bass ? 1.9 : 1.1;               // seconds rendered
-    final len   = (ring * _sr).round();
-    final atk   = 0.006 * _sr;
-    final amp   = (bass ? 0.16 : 0.12) * vel;
+    final len = (ring * _sr).round();
+    final atk = 0.006 * _sr;
+    final amp = (bass ? 0.16 : 0.12) * vel;
     for (var k = 0; k < len; k++) {
       final t   = k / _sr;
       final env = (k < atk ? k / atk : 1.0) * exp(-t * decay);
@@ -579,6 +583,39 @@ class AudioService {
       }
     }
     return _MusicPiece(66, 16, notes);                      // 4 bars of 4/4
+  }
+
+  /// Satie — Gymnopédie No. 1 (3/4, "lent et douloureux"). The signature vamp
+  /// rocks Gmaj7 ↔ Dmaj7 (low pedal bass held a bar, a soft mid chord on beats
+  /// 2 & 3); over it floats the verified main phrase (Mutopia LilyPond source):
+  /// F#5 A5 | G5 F#5 C#5 | B4 C#5 D5 | A4. A legato voice (long ring) suits the
+  /// pedalled stillness. Loops on the 4-bar phrase.
+  _MusicPiece _satieGymnopedie() {
+    const gBass = 43, dBass = 38;                 // G2, D2 (low pedal)
+    const gChord = [59, 62, 66];                  // B3 D4 F#4  — Gmaj7 upper
+    const dChord = [57, 61, 66];                  // A3 C#4 F#4 — Dmaj7 upper
+    final notes = <_Note>[];
+    for (var bar = 0; bar < 4; bar++) {           // vamp: G | D | G | D
+      final isG  = bar.isEven;
+      final base = bar * 3.0;                     // 3 beats per bar
+      notes.add(_Note(isG ? gBass : dBass, base, vel: 0.85, bass: true));
+      for (final c in (isG ? gChord : dChord)) {
+        notes.add(_Note(c, base + 1, vel: 0.30)); // beat 2
+        notes.add(_Note(c, base + 2, vel: 0.28)); // beat 3
+      }
+    }
+    // Lead melody (beats from loop start; bar 0 begins after a beat of rest).
+    const mel = <List<double>>[
+      [78, 1], [81, 2],                           // F#5 A5
+      [79, 3], [78, 4], [73, 5],                  // G5 F#5 C#5
+      [71, 6], [73, 7], [74, 8],                  // B4 C#5 D5
+      [69, 9],                                    // A4 (held to loop)
+    ];
+    for (final m in mel) {
+      notes.add(_Note(m[0].toInt(), m[1], vel: 0.6));
+    }
+    return _MusicPiece(60, 12, notes,             // 4 bars of 3/4
+      melodyDecay: 1.7, melodyRing: 2.6, bassDecay: 1.5, bassRing: 2.8);
   }
 
   /// 16-bit mono PCM WAV wrapper around float samples in [-1, 1].
@@ -621,11 +658,16 @@ class _Note {
   const _Note(this.midi, this.start, {this.vel = 1.0, this.bass = false});
 }
 
-/// A loopable musical phrase: [bpm], total [loopBeats] (the loop length), and the
-/// [notes] that fill it. Rendered by `_renderPiece` into one seamless buffer.
+/// A loopable musical phrase: [bpm], total [loopBeats] (the loop length), the
+/// [notes] that fill it, and the voice envelope (melody/bass decay + ring) — high
+/// decay + short ring = plucky music-box (Bach); low decay + long ring = legato
+/// (Satie). Rendered by `_renderPiece` into one seamless buffer.
 class _MusicPiece {
   final double bpm;
   final double loopBeats;
   final List<_Note> notes;
-  const _MusicPiece(this.bpm, this.loopBeats, this.notes);
+  final double melodyDecay, melodyRing, bassDecay, bassRing;
+  const _MusicPiece(this.bpm, this.loopBeats, this.notes,
+      {this.melodyDecay = 4.0, this.melodyRing = 1.1,
+       this.bassDecay = 2.2, this.bassRing = 1.9});
 }

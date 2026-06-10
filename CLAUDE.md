@@ -124,10 +124,13 @@ through a global Freeverb send for a cosmic space:
   and **duck the ambient pad** to `_padTarget*0.5` so the melody sits on top.
   Selection + volume persist (`music_track`/`music_volume`); resumed on launch;
   silenced by mute. Catalogue = `kMusicTracks` (`MusicTrack` id→title→composer),
-  each id mapped to a builder in `_pieceFor`. **Shipped:** Bach — Prelude in C
-  (BWV 846, mm. 1–4, I→ii⁷→V⁷→I arpeggio). **Planned:** Satie Gymnopédie No. 1,
-  Chopin (Prelude in A Op. 28 No. 7), Debussy Clair de Lune — add a `_pieceFor`
-  case + a `kMusicTracks` entry per piece. On-theme nod: GB Tetris "Music B" was a
+  each id mapped to a builder in `_pieceFor`. Per-piece voice envelope on
+  `_MusicPiece` (melody/bass decay + ring): plucky music-box (Bach) vs legato
+  (Satie). **Shipped:** Bach — Prelude in C (BWV 846, mm. 1–4, I→ii⁷→V⁷→I
+  arpeggio); Satie — Gymnopédie No. 1 (Gmaj7↔Dmaj7 vamp + the verified main
+  phrase from Mutopia's public-domain LilyPond source). **Planned:** Chopin
+  (Prelude in A Op. 28 No. 7), Debussy Clair de Lune — add a `_pieceFor` case + a
+  `kMusicTracks` entry per piece (verify melody pitches against an open score). On-theme nod: GB Tetris "Music B" was a
   chiptune Bach minuet. Chosen via the **Settings screen** (`settings_screen.dart`,
   ⚙ tune icon on Home).
 
