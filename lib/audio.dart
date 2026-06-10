@@ -22,6 +22,7 @@ const List<MusicTrack> kMusicTracks = [
   MusicTrack('chopin_prelude_a', 'Prelude in A', 'F. Chopin'),
   MusicTrack('korobeiniki', 'Korobeiniki', 'Russian folk'),
   MusicTrack('bach_menuet', 'Menuet, BWV 814', 'J.S. Bach'),
+  MusicTrack('sugar_plum', 'Sugar Plum Fairy', 'P. Tchaikovsky'),
 ];
 
 /// All game audio. Hybrid design:
@@ -587,6 +588,8 @@ class AudioService with WidgetsBindingObserver {
         return _korobeiniki();
       case 'bach_menuet':
         return _bachMenuet();
+      case 'sugar_plum':
+        return _sugarPlum();
       default:
         return null;
     }
@@ -782,6 +785,39 @@ class AudioService with WidgetsBindingObserver {
       notes.add(_Note(low8[i], 21 + i * 0.5, vel: 0.42));
     }
     return _MusicPiece(104, 24, notes);             // 8 bars of 3/4
+  }
+
+  /// Tchaikovsky — Dance of the Sugar Plum Fairy, the celesta theme (E minor,
+  /// 2/4), 16-beat A-section. Written for celesta — so the plucky music-box voice
+  /// is the *authentic* timbre. The melody (the famous chromatic descent + its
+  /// answer) is transposed down an octave for a warm register; the two quick
+  /// cascading "responses" stay low. Pitches verified by parsing a public-domain
+  /// MIDI to its top line via a throwaway Dart tool (no hand-transcription).
+  _MusicPiece _sugarPlum() {
+    final notes = <_Note>[];
+    // Melody (top line, −1 octave). Phrase 1 then phrase 2.
+    const mel = <List<num>>[
+      [79, 0.0], [76, 0.25], [79, 0.5], [78, 1.0], [75, 1.5], [76, 2.0],
+      [74, 2.5], [74, 2.75], [74, 3.0], [73, 3.5], [73, 3.75], [73, 4.0],
+      [72, 4.5], [72, 4.75], [72, 5.0], [71, 5.5], [76, 5.75], [72, 6.0],
+      [76, 6.25], [71, 6.5],
+      [67, 8.0], [64, 8.25], [67, 8.5], [66, 9.0], [72, 9.5], [71, 10.0],
+      [79, 10.5], [79, 10.75], [79, 11.0], [78, 11.5], [78, 11.75], [78, 12.0],
+      [76, 12.5], [76, 12.75], [76, 13.0], [75, 13.5], [78, 13.75], [76, 14.0],
+      [78, 14.25], [75, 14.5],
+    ];
+    for (final m in mel) {
+      notes.add(_Note(m[0].toInt(), m[1].toDouble(), vel: 0.5));
+    }
+    // The two quick descending answers (kept in the low register).
+    const resp = <List<num>>[
+      [52, 7.0], [50, 7.125], [48, 7.25], [47, 7.375], [46, 7.5],
+      [47, 15.0], [45, 15.125], [43, 15.25], [42, 15.375], [40, 15.5],
+    ];
+    for (final r in resp) {
+      notes.add(_Note(r[0].toInt(), r[1].toDouble(), vel: 0.45));
+    }
+    return _MusicPiece(104, 16, notes);             // 8 bars of 2/4
   }
 
   /// 16-bit mono PCM WAV wrapper around float samples in [-1, 1].

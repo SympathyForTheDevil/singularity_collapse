@@ -143,11 +143,14 @@ through a global Freeverb send for a cosmic space:
   Chopin — Prelude in A, Op. 28 No. 7 (bars 1–4, the E7→A mazurka gesture);
   Korobeiniki (the Tetris Type-A folk theme, A minor, melody only); Bach — Menuet
   from French Suite No. 3, BWV 814 (bars 1–8, two voices — the source of GB
-  Tetris "Music B"). Classical pitches verified against Mutopia's public-domain
-  LilyPond (relative-octave notation parsed, or converted to MIDI deterministically
-  via a throwaway Dart tool for the dense Menuet). **Planned:** Tchaikovsky — Dance
-  of the Sugar Plum Fairy (needs clean verified note data — it's chromatic, don't
-  guess); Debussy Clair de Lune (rubato — doesn't reduce cleanly to a beat grid). On-theme nod: GB Tetris "Music B" was a
+  Tetris "Music B"); Tchaikovsky — Dance of the Sugar Plum Fairy (celesta theme,
+  E minor, 16-beat A-section — written for celesta, so the music-box voice is the
+  *authentic* timbre; melody −1 octave, the two cascading answers kept low).
+  Pitches verified against public-domain sources — Mutopia LilyPond (relative-octave
+  parsed, or converted to MIDI deterministically via a throwaway Dart tool for the
+  dense Menuet), and a public-domain MIDI parsed to its top line (Sugar Plum). No
+  hand-transcription. **Planned:** Debussy Clair de Lune (rubato — doesn't reduce
+  cleanly to a beat grid). On-theme nod: GB Tetris "Music B" was a
   chiptune Bach minuet. Chosen via the **Settings screen** (`settings_screen.dart`,
   ⚙ tune icon on Home).
 

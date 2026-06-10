@@ -147,7 +147,7 @@ invisible in the main flow.
 - ◐ **Settings + audio** — `SettingsScreen` shipped (⚙ on Home): master sound
   on/off + a **classical music** picker (synthesized public-domain loops: Bach
   Prelude in C, Satie Gymnopédie No. 1, Chopin Prelude in A, Korobeiniki/Tetris,
-  Bach Menuet BWV 814 live; Sugar Plum Fairy + Clair de Lune queued) + a
+  Bach Menuet BWV 814, Tchaikovsky Sugar Plum Fairy live; Clair de Lune queued) + a
   music-volume slider. Music is scoped to gameplay/settings with a pause-menu
   toggle and pauses on app-background. Still
   open: SFX volume slider, a produced collapse-stinger sample, per-mode ambient
