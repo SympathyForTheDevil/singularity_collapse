@@ -8,6 +8,7 @@ import 'progress_service.dart';
 import 'puzzle_model.dart';
 import 'puzzle_screen.dart';
 import 'quantum_setup.dart';
+import 'settings_screen.dart';
 import 'streak_screen.dart';
 import 'theme_service.dart';
 
@@ -101,6 +102,14 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     AudioService.instance.ui();
     await ThemeService.setPenrose(!_penrose);
     if (mounted) setState(() => _penrose = ThemeService.penrose);
+  }
+
+  Future<void> _goSettings() async {
+    AudioService.instance.ui();
+    await Navigator.push(context, MaterialPageRoute(
+      builder: (_) => const SettingsScreen()));
+    // The settings screen can flip the master mute — re-sync the home toggle.
+    if (mounted) setState(() => _muted = AudioService.instance.muted);
   }
 
   @override
@@ -201,6 +210,23 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                   child: Icon(
                     _muted ? Icons.volume_off_rounded : Icons.volume_up_rounded,
                     color: _muted ? const Color(0xff35485a) : _cyan, size: 20),
+                ),
+              ),
+            ),
+            // ── Settings (top-right, left of Penrose) ───────────────────────
+            Positioned(
+              top: 8, right: 108,
+              child: GestureDetector(
+                onTap: _goSettings,
+                child: Container(
+                  width: 40, height: 40,
+                  decoration: BoxDecoration(
+                    color: const Color(0xff0a1018),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: const Color(0xff223344), width: 1),
+                  ),
+                  child: const Icon(Icons.tune_rounded,
+                    color: Color(0xff7799aa), size: 20),
                 ),
               ),
             ),

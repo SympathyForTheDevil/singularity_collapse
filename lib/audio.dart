@@ -4,6 +4,21 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_soloud/flutter_soloud.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+/// A selectable music track. [id] is the persisted key (empty string = none/off);
+/// the piece is synthesized on demand from note data (see [AudioService]).
+class MusicTrack {
+  final String id;
+  final String title;
+  final String composer;
+  const MusicTrack(this.id, this.title, this.composer);
+}
+
+/// The classical soundtrack catalogue. Grows as pieces are transcribed; each id
+/// maps to a `_pieceFor` builder in [AudioService].
+const List<MusicTrack> kMusicTracks = [
+  MusicTrack('bach_prelude', 'Prelude in C', 'J.S. Bach'),
+];
+
 /// All game audio. Hybrid design:
 ///  • procedural, perfectly-tuned synthesis for the musical/ambient layers
 ///    (milestone ladder notes, step ticks, the "denied" nudge, the ambient pad)
@@ -15,6 +30,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 ///
 /// Everything runs through one [SoLoud] engine with a global Freeverb send for a
 /// lush cosmic space. Low-latency and cross-platform (Android + iOS + more).
+///
+/// **Music** is an optional looping soundtrack of public-domain classical pieces,
+/// *synthesized* the same way as everything else (no audio assets, no recording
+/// licensing) — note data → a soft music-box voice → one seamless looping buffer.
+/// On-theme nod: Game Boy Tetris's "Music B" was itself a chiptune Bach minuet.
 class AudioService {
   AudioService._();
   static final AudioService instance = AudioService._();
@@ -41,12 +61,25 @@ class AudioService {
   AudioSource? _pad;
   SoundHandle? _padHandle;
 
+  // Music — a looping classical soundtrack, synthesized lazily on first use.
+  final Map<String, AudioSource> _music = {};   // id → rendered loop
+  SoundHandle? _musicHandle;
+  String _musicTrack  = '';        // '' = none/off
+  double _musicVolume = 0.7;       // 0..1, user setting
+  double _padTarget   = 0;         // current ambient-pad fade target (for ducking)
+  static const _musicKey    = 'music_track';
+  static const _musicVolKey = 'music_volume';
+  String get musicTrack  => _musicTrack;
+  double get musicVolume => _musicVolume;
+
   // ── Lifecycle ──────────────────────────────────────────────────────────────
   Future<void> init() async {
     if (_ready) return;
     try {
       final prefs = await SharedPreferences.getInstance();
-      _muted = prefs.getBool(_muteKey) ?? false;
+      _muted       = prefs.getBool(_muteKey) ?? false;
+      _musicTrack  = prefs.getString(_musicKey) ?? '';
+      _musicVolume = prefs.getDouble(_musicVolKey) ?? 0.7;
 
       await _soloud.init(sampleRate: _sr, channels: Channels.stereo);
 
@@ -65,6 +98,7 @@ class AudioService {
 
       await _buildSounds();
       _ready = true;
+      if (_musicTrack.isNotEmpty) _startMusic();   // resume the saved soundtrack
     } catch (e) {
       debugPrint('Audio: init failed, continuing silently ($e)');
       _ready = false;
@@ -73,7 +107,12 @@ class AudioService {
 
   Future<void> setMuted(bool value) async {
     _muted = value;
-    if (value) stopAmbient();
+    if (value) {
+      stopAmbient();
+      _stopMusic();
+    } else if (_musicTrack.isNotEmpty) {
+      _startMusic();
+    }
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_muteKey, value);
   }
@@ -147,10 +186,13 @@ class AudioService {
   // ── Ambient bed ────────────────────────────────────────────────────────────
   Future<void> startAmbient({bool calm = false}) async {
     if (!_ready || _muted || _pad == null || _padHandle != null) return;
+    _padTarget = calm ? 0.42 : 0.28;
     final h = _soloud.play(_pad!, volume: 0, looping: true);
     _padHandle = h;
     _soloud.setProtectVoice(h, true);
-    _soloud.fadeVolume(h, calm ? 0.42 : 0.28, const Duration(milliseconds: 1800));
+    // Duck the pad under any active soundtrack so the melody reads on top.
+    final target = _musicHandle != null ? _padTarget * 0.5 : _padTarget;
+    _soloud.fadeVolume(h, target, const Duration(milliseconds: 1800));
   }
 
   void stopAmbient() {
@@ -160,6 +202,63 @@ class AudioService {
     if (!_ready) return;
     _soloud.fadeVolume(h, 0, const Duration(milliseconds: 700));
     _soloud.schedulePause(h, const Duration(milliseconds: 750));
+  }
+
+  // ── Music (classical soundtrack) ─────────────────────────────────────────────
+  /// Select a track by id ('' = off). Synthesizes it on first use, then loops it
+  /// app-wide. Persisted; resumed on next launch.
+  Future<void> setTrack(String id) async {
+    _musicTrack = id;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_musicKey, id);
+    _stopMusic();
+    if (id.isNotEmpty) await _startMusic();
+  }
+
+  Future<void> setMusicVolume(double v) async {
+    _musicVolume = v.clamp(0.0, 1.0);
+    final h = _musicHandle;
+    if (_ready && h != null) _soloud.setVolume(h, _musicVolume);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble(_musicVolKey, _musicVolume);
+  }
+
+  Future<void> _startMusic() async {
+    if (!_ready || _muted || _musicTrack.isEmpty || _musicHandle != null) return;
+    final src = await _ensureTrack(_musicTrack);
+    if (src == null || _musicHandle != null) return;
+    final h = _soloud.play(src, volume: 0, looping: true);
+    _musicHandle = h;
+    _soloud.setProtectVoice(h, true);
+    _soloud.fadeVolume(h, _musicVolume, const Duration(milliseconds: 1400));
+    final pad = _padHandle;          // duck the pad under the melody
+    if (pad != null) {
+      _soloud.fadeVolume(pad, _padTarget * 0.5, const Duration(milliseconds: 900));
+    }
+  }
+
+  void _stopMusic() {
+    final h = _musicHandle;
+    if (h == null) return;
+    _musicHandle = null;
+    if (!_ready) return;
+    _soloud.fadeVolume(h, 0, const Duration(milliseconds: 600));
+    _soloud.schedulePause(h, const Duration(milliseconds: 650));
+    final pad = _padHandle;          // restore the pad to full bed level
+    if (pad != null) {
+      _soloud.fadeVolume(pad, _padTarget, const Duration(milliseconds: 900));
+    }
+  }
+
+  /// Synthesize (once) and cache a track's looping buffer.
+  Future<AudioSource?> _ensureTrack(String id) async {
+    final cached = _music[id];
+    if (cached != null) return cached;
+    final piece = _pieceFor(id);
+    if (piece == null) return null;
+    final src = await _load('music_$id', _renderPiece(piece));
+    _music[id] = src;
+    return src;
   }
 
   // ── Sound construction ─────────────────────────────────────────────────────
@@ -404,6 +503,84 @@ class AudioService {
     return out;
   }
 
+  // ── Music synthesis ──────────────────────────────────────────────────────────
+  /// Map a track id to its note data. New pieces plug in here + [kMusicTracks].
+  _MusicPiece? _pieceFor(String id) {
+    switch (id) {
+      case 'bach_prelude':
+        return _bachPreludeInC();
+      default:
+        return null;
+    }
+  }
+
+  /// Render a piece into a single seamlessly-looping buffer. Each note's tail
+  /// **wraps around** the buffer end (modular indexing), so a note struck near the
+  /// loop point rings on into the next iteration exactly as in a real performance
+  /// — no clicks, no gap, no tempo drift.
+  Float64List _renderPiece(_MusicPiece p) {
+    final spb     = 60.0 / p.bpm;                 // seconds per beat
+    final loopSec = p.loopBeats * spb;
+    final out     = _alloc(loopSec);
+    for (final n in p.notes) {
+      if (n.midi < 0) continue;                   // rest
+      final freq  = 440.0 * pow(2, (n.midi - 69) / 12.0).toDouble();
+      final start = (n.start * spb * _sr).round();
+      _addVoice(out, start, freq, bass: n.bass, vel: n.vel);
+    }
+    return out;
+  }
+
+  /// Add one plucked, music-box/celesta voice (or a softer, longer bass voice)
+  /// into [out] starting at [startSample], wrapping its decaying tail around the
+  /// buffer so the loop stays seamless.
+  void _addVoice(Float64List out, int startSample, double freq,
+      {required bool bass, required double vel}) {
+    final n = out.length;
+    if (n == 0) return;
+    final decay = bass ? 2.2 : 4.0;               // exp decay rate (pluck)
+    final ring  = bass ? 1.9 : 1.1;               // seconds rendered
+    final len   = (ring * _sr).round();
+    final atk   = 0.006 * _sr;
+    final amp   = (bass ? 0.16 : 0.12) * vel;
+    for (var k = 0; k < len; k++) {
+      final t   = k / _sr;
+      final env = (k < atk ? k / atk : 1.0) * exp(-t * decay);
+      final double s = bass
+          ? sin(2 * pi * freq * t) + 0.3 * sin(2 * pi * freq * 2 * t)
+          : sin(2 * pi * freq * t)
+              + 0.5  * sin(2 * pi * freq * 2    * t)
+              + 0.25 * sin(2 * pi * freq * 3    * t)
+              + 0.12 * sin(2 * pi * freq * 4.02 * t);
+      out[(startSample + k) % n] += s * env * amp;
+    }
+  }
+
+  /// Bach — Prelude in C, BWV 846, measures 1–4 (I → ii⁷ → V⁷ → I), the iconic
+  /// broken-chord figure. Each bar = two lower notes + a three-note arpeggio,
+  /// the 8-note group played twice (16 sixteenths). Loops on the C→C cadence.
+  _MusicPiece _bachPreludeInC() {
+    // Five chord tones per bar (MIDI): [low, low2, up1, up2, up3].
+    const bars = <List<int>>[
+      [60, 64, 67, 72, 76],   // C major          C E G C E
+      [60, 62, 69, 74, 77],   // D min7 / C        C D A D F
+      [59, 62, 67, 74, 77],   // G7 / B            B D G D F
+      [60, 64, 67, 72, 76],   // C major (resolve) C E G C E
+    ];
+    const bass    = [48, 48, 47, 48];                       // C3 C3 B2 C3
+    const pattern = [0, 1, 2, 3, 4, 2, 3, 4,
+                     0, 1, 2, 3, 4, 2, 3, 4];               // 16 × 1/16
+    final notes = <_Note>[];
+    for (var b = 0; b < bars.length; b++) {
+      notes.add(_Note(bass[b], (b * 4).toDouble(), vel: 0.9, bass: true));
+      for (var i = 0; i < pattern.length; i++) {
+        notes.add(_Note(bars[b][pattern[i]], b * 4 + i * 0.25,
+            vel: i % 8 == 0 ? 0.55 : 0.4));
+      }
+    }
+    return _MusicPiece(66, 16, notes);                      // 4 bars of 4/4
+  }
+
   /// 16-bit mono PCM WAV wrapper around float samples in [-1, 1].
   Uint8List _wav(Float64List mono) {
     final n  = mono.length;
@@ -432,4 +609,23 @@ class AudioService {
     }
     return bd.buffer.asUint8List();
   }
+}
+
+/// One note in a [_MusicPiece]: a MIDI pitch (<0 = rest) struck at [start] beats,
+/// with velocity [vel]; [bass] selects the softer, longer-ringing bass voice.
+class _Note {
+  final int midi;
+  final double start;   // beats from loop start
+  final double vel;     // 0..1
+  final bool bass;
+  const _Note(this.midi, this.start, {this.vel = 1.0, this.bass = false});
+}
+
+/// A loopable musical phrase: [bpm], total [loopBeats] (the loop length), and the
+/// [notes] that fill it. Rendered by `_renderPiece` into one seamless buffer.
+class _MusicPiece {
+  final double bpm;
+  final double loopBeats;
+  final List<_Note> notes;
+  const _MusicPiece(this.bpm, this.loopBeats, this.notes);
 }

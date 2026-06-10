@@ -45,6 +45,7 @@ lib/
   theme_service.dart Persisted cosmetic board themes (Penrose 45° skin)
   quantum_setup.dart QuantumSetupScreen — tailor-your-session picker (types + timed)
   quantum_service.dart Persisted Quantum-mode config (chosen types, normal, timed)
+  settings_screen.dart SettingsScreen — audio options (music picker + volume + sound)
 test/
   widget_test.dart   Engine + medal/streak/freeze unit tests
 ```
@@ -112,6 +113,23 @@ through a global Freeverb send for a cosmic space:
   multiverse bridge crossing (distinct from the wormhole `warp()`).
 - **Mute** — toggle on the home screen, persisted via `shared_preferences`
   (`audio_muted`); `AudioService.muted` is honoured by every play call.
+- **Music** (classical soundtrack) — an *optional* looping track of public-domain
+  classical pieces, **synthesized** like everything else (no audio assets, no
+  recording licensing): each piece is note data (`_MusicPiece`/`_Note`) rendered by
+  `_renderPiece` through a soft music-box/celesta voice (`_addVoice`) into **one
+  seamlessly-looping buffer** — each note's decaying tail **wraps around** the
+  buffer end (modular indexing) so the loop has no click/gap/tempo-drift. Tracks
+  are **lazily** synthesized on first selection and cached (`_music` map), play
+  **app-wide** (independent of any screen, via `_musicHandle`, `setProtectVoice`),
+  and **duck the ambient pad** to `_padTarget*0.5` so the melody sits on top.
+  Selection + volume persist (`music_track`/`music_volume`); resumed on launch;
+  silenced by mute. Catalogue = `kMusicTracks` (`MusicTrack` id→title→composer),
+  each id mapped to a builder in `_pieceFor`. **Shipped:** Bach — Prelude in C
+  (BWV 846, mm. 1–4, I→ii⁷→V⁷→I arpeggio). **Planned:** Satie Gymnopédie No. 1,
+  Chopin (Prelude in A Op. 28 No. 7), Debussy Clair de Lune — add a `_pieceFor`
+  case + a `kMusicTracks` entry per piece. On-theme nod: GB Tetris "Music B" was a
+  chiptune Bach minuet. Chosen via the **Settings screen** (`settings_screen.dart`,
+  ⚙ tune icon on Home).
 
 Keep everything procedural/asset-free unless deliberately adding a designed
 sample (then update this doc). The reverb setup is wrapped in its own try/catch

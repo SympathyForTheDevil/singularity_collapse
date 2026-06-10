@@ -144,8 +144,11 @@ invisible in the main flow.
 
 - ☐ **Boss / escape mode** — the shelved *hunter* as a dedicated chase level where
   fill-every-cell doesn't apply (a separate mode, not a normal-puzzle addon).
-- ☐ **Settings + audio** — a settings screen (volume, SFX/music sliders); a produced
-  collapse-stinger sample; per-mode ambient intensity.
+- ◐ **Settings + audio** — `SettingsScreen` shipped (⚙ on Home): master sound
+  on/off + a **classical music** picker (synthesized public-domain loops; Bach
+  Prelude in C live, Satie/Chopin/Debussy queued) + a music-volume slider. Still
+  open: SFX volume slider, a produced collapse-stinger sample, per-mode ambient
+  intensity.
 - ☐ **Penrose × multiverse combo** — currently Penrose is forced off in multiverse;
   compose the transforms if wanted.
 - ☐ **Rectangular single-board variety** — the rectangular geometry now exists
