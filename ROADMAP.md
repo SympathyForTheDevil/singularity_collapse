@@ -69,14 +69,16 @@ Required before any store release; self-contained.
 
 The engagement engine. Builds on the existing `DailyService` (streak, daily seed).
 
-- ☐ **Par + medals per daily** — Bronze = solve, Silver = under par time, Gold =
-  no backtracks. Track per-day result; show on the daily and the share card.
-- ☐ **Star-map constellation** — each daily solve lights a star in a monthly grid;
-  a finished month = a named constellation. A new home-screen surface and a
-  `ProgressService` (persisted per-day medal map).
+- ✅ **Par + medals per daily** — Bronze = solve, Silver = under par, Gold = clean
+  (no backtracks). `ProgressService` persists the best medal per day; computed on a
+  daily solve and shown as a badge in the collapse/share overlay + share text.
+- ✅ **Star-map constellation** — `StarMapScreen` (home ✨ icon): the current month
+  as a 7-wide grid where each solved day is a star coloured by its medal, plus a
+  streak / this-month / gold stat strip. Reads `ProgressService.all()`.
 - ☐ **Streak-freeze token** — one "miss a day" forgiveness; earned or granted.
   Extends `DailyService` streak logic.
 - ☐ **Weekly Constellation set** — a 7-day themed run.
+- ☐ **Month navigation** on the star-map (currently current-month only).
 
 **Effort:** medium–large (new screens + a progress service). **Dependencies:** none
 hard; medals feed the share card and the star-map.
