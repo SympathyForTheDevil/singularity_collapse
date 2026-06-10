@@ -68,4 +68,20 @@ class ProgressService {
     m[date] = merged;
     await p.setString(_key, jsonEncode(m));
   }
+
+  // ── Infinity high score (entropy survival run) ──────────────────────────────
+  static const _bestKey = 'infinity_best';
+
+  static Future<int> bestInfinity() async {
+    final p = await SharedPreferences.getInstance();
+    return p.getInt(_bestKey) ?? 0;
+  }
+
+  /// Record an Infinity run score, keeping the best. Returns the best after.
+  static Future<int> recordInfinity(int score) async {
+    final p = await SharedPreferences.getInstance();
+    final best = p.getInt(_bestKey) ?? 0;
+    if (score > best) { await p.setInt(_bestKey, score); return score; }
+    return best;
+  }
 }

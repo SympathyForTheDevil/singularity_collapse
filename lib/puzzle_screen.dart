@@ -157,8 +157,26 @@ class _PuzzleScreenState extends State<PuzzleScreen>
 
   static const Color _accent = Color(0xffffc24d);
 
-  bool get _isDaily   => widget.mode == PuzzleMode.daily;
-  bool get _isQuantum => widget.mode == PuzzleMode.quantum;
+  bool get _isDaily    => widget.mode == PuzzleMode.daily;
+  bool get _isQuantum  => widget.mode == PuzzleMode.quantum;
+  bool get _isInfinity => widget.mode == PuzzleMode.infinity;
+
+  // ── Infinity entropy run (high-score survival) ──────────────────────────────
+  double _entropy   = 0;     // 0..1; fills while solving + on mistakes, run-wide
+  int    _runScore  = 0;     // accrues per board solved this run
+  int    _bestScore = 0;     // best Infinity run (loaded on game over)
+  bool   _runOver   = false; // entropy hit 1.0 → run ended
+  static const double _kEntBacktrack = 0.04;  // TUNE — entropy per backtrack
+  static const double _kEntHint      = 0.06;  // TUNE — per hint
+  static const double _kEntSolution  = 0.25;  // TUNE — per solution peek
+  static const double _kEntVent      = 0.28;  // TUNE — relief on solving a board
+  /// Entropy added per second while a board is unsolved (steeper each level).
+  double _entropyRate(int lvl) => 0.005 * (1 + lvl * 0.09);   // TUNE
+
+  void _addEntropy(double d) {
+    if (!_isInfinity || _runOver) return;
+    _entropy = (_entropy + d).clamp(0.0, 1.0);   // game-over is checked in the timer
+  }
   /// Whether the timer is shown/relevant: always in Daily/Infinity; in Quantum
   /// only when the player chose a timed session.
   bool get _timed => !_isQuantum || widget.quantumTimed;
@@ -206,6 +224,12 @@ class _PuzzleScreenState extends State<PuzzleScreen>
               });
             }
           } else {
+            if (_isInfinity) {
+              // Score the board (depth × quality) and vent entropy for solving.
+              final clean = !_backtracked && !_peeked;
+              _runScore += 50 + level * 15 + (clean ? 40 : 0) + max(0, 45 - _seconds);
+              _entropy = (_entropy - _kEntVent).clamp(0.0, 1.0);
+            }
             _newPuzzle(advance: true);
           }
           _solve.reset();
@@ -275,8 +299,26 @@ class _PuzzleScreenState extends State<PuzzleScreen>
     _timer?.cancel();
     _seconds = 0;
     _timer = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (mounted && !solved && !_paused && _cards.isEmpty) setState(() => _seconds++);
+      if (!mounted || solved || _paused || _cards.isNotEmpty || _runOver) return;
+      if (_isInfinity) _entropy = (_entropy + _entropyRate(level)).clamp(0.0, 1.0);
+      setState(() => _seconds++);
+      if (_isInfinity && _entropy >= 1.0) _triggerGameOver();
     });
+  }
+
+  Future<void> _triggerGameOver() async {
+    _stopTimer();
+    HapticFeedback.heavyImpact();
+    AudioService.instance.collapse();          // the heat-death sting
+    final best = await ProgressService.recordInfinity(_runScore);
+    if (mounted) setState(() { _runOver = true; _bestScore = best; });
+  }
+
+  void _restartRun() {
+    AudioService.instance.ui();
+    level = 1; solvedCount = 0;
+    _runScore = 0; _entropy = 0; _runOver = false;
+    _newPuzzle();
   }
 
   void _stopTimer() {
@@ -357,7 +399,7 @@ class _PuzzleScreenState extends State<PuzzleScreen>
     path
       ..clear()
       ..add(grid.startCell);
-    _backtracked = true;
+    _backtracked = true; _addEntropy(_kEntBacktrack);
     _clearHint();
     _warp.reset();   // portals back to their idle look
     _unlock.reset();
@@ -381,7 +423,7 @@ class _PuzzleScreenState extends State<PuzzleScreen>
     } else {
       path.removeLast();
     }
-    _backtracked = true;
+    _backtracked = true; _addEntropy(_kEntBacktrack);
     _clearHint();
     HapticFeedback.selectionClick();
     setState(() {});
@@ -397,7 +439,7 @@ class _PuzzleScreenState extends State<PuzzleScreen>
     if (i < 0) return;
     path.removeRange(i + 1, path.length);
     _atomic.removeWhere((s, len) => s > i);
-    _backtracked = true;
+    _backtracked = true; _addEntropy(_kEntBacktrack);
     _clearHint();
     HapticFeedback.selectionClick();
     setState(() {});
@@ -595,7 +637,7 @@ class _PuzzleScreenState extends State<PuzzleScreen>
   }
 
   void _onPan(Offset local) {
-    if (solved || _paused || _cards.isNotEmpty) return;
+    if (solved || _paused || _runOver || _cards.isNotEmpty) return;
     local = _boardLocal(local);
     final cell = _cellAt(local);
     if (cell == null || cell == path.last) return;
@@ -611,7 +653,7 @@ class _PuzzleScreenState extends State<PuzzleScreen>
       // during forward motion is ignored.
       if (_deepInside(local, cell)) {
         path.removeLast();
-        _backtracked = true;
+        _backtracked = true; _addEntropy(_kEntBacktrack);
         _clearHint();
         HapticFeedback.selectionClick();
         setState(() {});
@@ -706,7 +748,7 @@ class _PuzzleScreenState extends State<PuzzleScreen>
 
   /// Tap a visited cell to rewind the worldline to it. Tapping elsewhere does nothing.
   void _onTap(Offset local) {
-    if (solved || _paused || _cards.isNotEmpty) return;
+    if (solved || _paused || _runOver || _cards.isNotEmpty) return;
     local = _boardLocal(local);
     final cell = _cellAt(local);
     if (cell == null) return;
@@ -738,6 +780,7 @@ class _PuzzleScreenState extends State<PuzzleScreen>
     setState(() => _showSolution = !_showSolution);
     if (_showSolution) {
       _peeked = true;          // revealing the answer forfeits the UNAIDED badge
+      _addEntropy(_kEntSolution);
       _trace.repeat();
     } else {
       _trace.stop();
@@ -762,6 +805,7 @@ class _PuzzleScreenState extends State<PuzzleScreen>
     }
     if (hint.isEmpty) return;
     _peeked = true;            // a hint also forfeits the UNAIDED badge
+    _addEntropy(_kEntHint);
     HapticFeedback.selectionClick();
     setState(() => _hintCells = hint);
     _hintCellsTimer?.cancel();
@@ -896,10 +940,16 @@ class _PuzzleScreenState extends State<PuzzleScreen>
                       Text(
                         _isDaily
                           ? '$filled / $total  CONSUMED'
-                          : '$filled / $total  CONSUMED      SOLVED  $solvedCount',
+                          : _isInfinity
+                            ? '$filled / $total  CONSUMED      SCORE  $_runScore'
+                            : '$filled / $total  CONSUMED      SOLVED  $solvedCount',
                         style: const TextStyle(
                           color: Color(0xff8aa6bc), fontSize: 12,
                           fontFamily: 'monospace', letterSpacing: 2)),
+                      if (_isInfinity) ...[
+                        const SizedBox(height: 12),
+                        _entropyBar(),
+                      ],
                       if (_timed) ...[
                         const SizedBox(height: 12),
                         Text(
@@ -1036,6 +1086,7 @@ class _PuzzleScreenState extends State<PuzzleScreen>
 
           // ── Share overlay (daily mode, after solve) ─────────────────────
           if (_showShare) _buildShareOverlay(),
+          if (_runOver) _buildGameOverOverlay(),
         ],
       ),
     );
@@ -1176,6 +1227,94 @@ class _PuzzleScreenState extends State<PuzzleScreen>
               color: c, fontSize: 11, fontFamily: 'monospace',
               fontWeight: FontWeight.bold, letterSpacing: 1.5)),
         ],
+      ),
+    );
+  }
+
+  /// The Infinity entropy meter — teal → amber → red as it fills.
+  Widget _entropyBar() {
+    final e   = _entropy.clamp(0.0, 1.0);
+    final col = e < 0.5 ? const Color(0xff37e0d0)
+              : e < 0.8 ? const Color(0xffffc24d)
+              : const Color(0xffff4466);
+    return SizedBox(
+      width: 232,
+      child: Column(children: [
+        Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+          const Text('ENTROPY', style: TextStyle(
+            color: Color(0xff5a7488), fontSize: 9,
+            fontFamily: 'monospace', letterSpacing: 2)),
+          Text('${(e * 100).round()}%', style: TextStyle(
+            color: col, fontSize: 9, fontFamily: 'monospace',
+            letterSpacing: 1, fontWeight: FontWeight.bold)),
+        ]),
+        const SizedBox(height: 4),
+        Container(
+          height: 9,
+          decoration: BoxDecoration(
+            color: const Color(0xff0e1c28),
+            borderRadius: BorderRadius.circular(5),
+            border: Border.all(color: const Color(0xff1c2e3c), width: 1)),
+          child: FractionallySizedBox(
+            alignment: Alignment.centerLeft,
+            widthFactor: e <= 0 ? 0.0 : e,
+            child: Container(decoration: BoxDecoration(
+              color: col,
+              borderRadius: BorderRadius.circular(5),
+              boxShadow: e > 0.7
+                ? [BoxShadow(color: col.withValues(alpha: 0.7), blurRadius: 8)]
+                : null)),
+          ),
+        ),
+      ]),
+    );
+  }
+
+  Widget _buildGameOverOverlay() {
+    final best = _runScore >= _bestScore;
+    return Container(
+      color: const Color(0xf204050a),
+      child: SafeArea(
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('HEAT DEATH',
+                style: TextStyle(
+                  color: Color(0xffff4466), fontSize: 26, fontFamily: 'monospace',
+                  fontWeight: FontWeight.bold, letterSpacing: 5,
+                  shadows: [Shadow(color: Color(0x88ff4466), blurRadius: 22)])),
+              const SizedBox(height: 6),
+              const Text('ENTROPY MAXED · THE REGION COLLAPSED',
+                style: TextStyle(
+                  color: Color(0xff8aa6bc), fontSize: 10,
+                  fontFamily: 'monospace', letterSpacing: 2)),
+              const SizedBox(height: 36),
+              Text('$_runScore', style: const TextStyle(
+                color: _accent, fontSize: 56, fontFamily: 'monospace',
+                fontWeight: FontWeight.bold,
+                shadows: [Shadow(color: Color(0x66ffc24d), blurRadius: 20)])),
+              const Text('SCORE', style: TextStyle(
+                color: Color(0xff5a7488), fontSize: 10,
+                fontFamily: 'monospace', letterSpacing: 3)),
+              const SizedBox(height: 14),
+              Text(best ? '★ NEW BEST ★' : 'BEST  $_bestScore',
+                style: TextStyle(
+                  color: best ? _accent : const Color(0xff7799aa), fontSize: 12,
+                  fontFamily: 'monospace', letterSpacing: 2,
+                  fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              Text('REACHED STAGE $level', style: const TextStyle(
+                color: Color(0xff5a7488), fontSize: 10,
+                fontFamily: 'monospace', letterSpacing: 2)),
+              const SizedBox(height: 40),
+              _overlayBtn('NEW RUN', _accent, _restartRun),
+              const SizedBox(height: 12),
+              _overlayBtn('HOME', const Color(0xff7799aa),
+                () => Navigator.pop(context)),
+            ],
+          ),
+        ),
       ),
     );
   }
