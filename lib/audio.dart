@@ -18,6 +18,7 @@ class MusicTrack {
 const List<MusicTrack> kMusicTracks = [
   MusicTrack('bach_prelude', 'Prelude in C', 'J.S. Bach'),
   MusicTrack('satie_gymnopedie', 'Gymnopédie No. 1', 'Erik Satie'),
+  MusicTrack('chopin_prelude_a', 'Prelude in A', 'F. Chopin'),
 ];
 
 /// All game audio. Hybrid design:
@@ -512,6 +513,8 @@ class AudioService {
         return _bachPreludeInC();
       case 'satie_gymnopedie':
         return _satieGymnopedie();
+      case 'chopin_prelude_a':
+        return _chopinPreludeInA();
       default:
         return null;
     }
@@ -616,6 +619,42 @@ class AudioService {
     }
     return _MusicPiece(60, 12, notes,             // 4 bars of 3/4
       melodyDecay: 1.7, melodyRing: 2.6, bassDecay: 1.5, bassRing: 2.8);
+  }
+
+  /// Chopin — Prelude in A, Op. 28 No. 7 ("Andantino", 3/4), bars 1–4: the famous
+  /// gentle mazurka gesture and its rising answer (an E7→A cadence). Verified
+  /// against Mutopia's public-domain LilyPond source (relative-octave notation
+  /// parsed). The melody (top voice) floats over the warm RH inner chords and the
+  /// LH oom-pah bass; an E4 upbeat at the loop end leads back into the C#5 downbeat.
+  _MusicPiece _chopinPreludeInA() {
+    final notes = <_Note>[];
+    void n(int midi, double beat, double vel, {bool bass = false}) =>
+        notes.add(_Note(midi, beat, vel: vel, bass: bass));
+
+    // Melody (top voice).  C#5 D5 | B4 B4 B4 | F#5 | D#5 E5 A5 A5 A5 | E4 (upbeat)
+    const mv = 0.6;
+    n(73, 0.0, mv); n(74, 0.75, mv);                       // C#5 (dotted-8th) D5
+    n(71, 1.0, mv); n(71, 2.0, mv); n(71, 3.0, mv);        // B4 B4 B4(held)
+    n(78, 5.0, mv);                                        // F#5 (pickup)
+    n(75, 6.0, mv); n(76, 6.75, mv);                       // D#5 E5
+    n(81, 7.0, mv); n(81, 8.0, mv); n(81, 9.0, mv);        // A5 A5 A5(held)
+    n(64, 11.0, mv);                                       // E4 upbeat → loop
+
+    // RH inner chord tones (warm filler) — softer.
+    const iv = 0.32;
+    for (final b in [1.0, 2.0, 3.0]) { n(68, b, iv); n(62, b, iv); }  // G#4 D4
+    n(74, 5.0, iv);                                        // D5  (under F#5)
+    n(72, 6.0, iv);                                        // B#4 (chromatic)
+    for (final b in [6.75, 7.0, 8.0, 9.0]) { n(73, b, iv); }          // C#5
+
+    // LH — bass note then octave/chord on beats 2–3 (E7 for 2 bars, then A).
+    n(40, 0.0, 0.8, bass: true);                           // E2
+    for (final b in [1.0, 2.0, 3.0]) { n(52, b, 0.34); n(64, b, 0.34); }  // E3 E4
+    n(45, 6.0, 0.8, bass: true);                           // A2
+    for (final b in [7.0, 8.0, 9.0]) { n(57, b, 0.34); n(64, b, 0.34); }  // A3 E4
+
+    return _MusicPiece(64, 12, notes,             // 4 bars of 3/4
+      melodyDecay: 2.2, melodyRing: 2.0, bassDecay: 1.6, bassRing: 2.4);
   }
 
   /// 16-bit mono PCM WAV wrapper around float samples in [-1, 1].

@@ -146,8 +146,8 @@ invisible in the main flow.
   fill-every-cell doesn't apply (a separate mode, not a normal-puzzle addon).
 - ◐ **Settings + audio** — `SettingsScreen` shipped (⚙ on Home): master sound
   on/off + a **classical music** picker (synthesized public-domain loops; Bach
-  Prelude in C + Satie Gymnopédie No. 1 live, Chopin/Debussy queued) + a
-  music-volume slider. Still
+  Prelude in C + Satie Gymnopédie No. 1 + Chopin Prelude in A live, Debussy
+  queued) + a music-volume slider. Still
   open: SFX volume slider, a produced collapse-stinger sample, per-mode ambient
   intensity.
 - ☐ **Penrose × multiverse combo** — currently Penrose is forced off in multiverse;
