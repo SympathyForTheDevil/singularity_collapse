@@ -135,7 +135,10 @@ class _PuzzleScreenState extends State<PuzzleScreen>
   final Set<String> _seenKeys = {};        // persisted "encountered" flags
   bool _seenLoaded = false;
   final List<GuideEntry> _cards = [];       // queued tutorial cards (front = active)
-  bool _showSolution = false;              // reveal the answer (playtest / premium)
+  bool _showSolution = false;              // reveal the full answer (playtest / premium)
+  List<int> _hintCells = const [];         // a few next-step hint cells (premium hook)
+  Timer? _hintCellsTimer;
+  static const int _hintSteps = 3;         // how many next cells a hint reveals
 
   // Atomic moves (a gravity-well launch or a wormhole teleport) span several
   // cells but undo/rewind as one unit. Maps the path index of the move's first
@@ -256,6 +259,7 @@ class _PuzzleScreenState extends State<PuzzleScreen>
     AudioService.instance.stopAmbient();
     _timer?.cancel();
     _hintTimer?.cancel();
+    _hintCellsTimer?.cancel();
     _pulse.dispose();
     _solve.dispose();
     _nudge.dispose();
@@ -339,6 +343,8 @@ class _PuzzleScreenState extends State<PuzzleScreen>
     _measure.reset();
     _atomic.clear();
     _showSolution = false;     // new board → hide any revealed solution
+    _hintCellsTimer?.cancel();
+    _hintCells = const [];
     _trace.stop();
     _cards.clear();
     _startTimer();
@@ -738,6 +744,32 @@ class _PuzzleScreenState extends State<PuzzleScreen>
     }
   }
 
+  /// Reveal the next few correct cells (a nudge, not the whole answer). Computed
+  /// from the longest prefix of the player's path that matches the solution, so
+  /// it points the way forward (or back onto the path if they've strayed). A
+  /// premium hook: gate count/availability behind an entitlement later.
+  void _showHintSteps() {
+    if (solved) return;
+    AudioService.instance.ui();
+    final sol = grid.solution;
+    var m = 0;
+    while (m < path.length && m < sol.length && path[m] == sol[m]) {
+      m++;
+    }
+    final hint = <int>[];
+    for (var i = m; i < sol.length && hint.length < _hintSteps; i++) {
+      if (!path.contains(sol[i])) hint.add(sol[i]);
+    }
+    if (hint.isEmpty) return;
+    _peeked = true;            // a hint also forfeits the UNAIDED badge
+    HapticFeedback.selectionClick();
+    setState(() => _hintCells = hint);
+    _hintCellsTimer?.cancel();
+    _hintCellsTimer = Timer(const Duration(milliseconds: 4000), () {
+      if (mounted) setState(() => _hintCells = const []);
+    });
+  }
+
   void _onSolved() {
     _stopTimer();
     solved = true;
@@ -951,6 +983,7 @@ class _PuzzleScreenState extends State<PuzzleScreen>
                                 measureT: _measure.value,
                                 accent: _accent,
                                 penrose: _penrose && !mv,
+                                hintCells: _hintCells,
                               ),
                             ),
                           ),
@@ -960,18 +993,19 @@ class _PuzzleScreenState extends State<PuzzleScreen>
                   ),
                 ),
 
-                // ── Control bar — undo / reset (bigger, fills the lower space) ─
+                // ── Control bar — undo / reset / hint / solution ──────────────
                 Padding(
                   padding: const EdgeInsets.only(top: 12, bottom: 4),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
+                  child: Wrap(
+                    alignment: WrapAlignment.center,
+                    spacing: 10, runSpacing: 8,
                     children: [
                       _ctrlBtn(Icons.undo, 'UNDO', _undo,
                         enabled: !solved && path.length > 1),
-                      const SizedBox(width: 12),
                       _ctrlBtn(Icons.refresh, 'RESET', _reset,
                         enabled: !solved && path.length > 1),
-                      const SizedBox(width: 12),
+                      _ctrlBtn(Icons.lightbulb_outline, 'HINT', _showHintSteps,
+                        enabled: !solved, active: _hintCells.isNotEmpty),
                       _ctrlBtn(
                         _showSolution ? Icons.visibility : Icons.visibility_outlined,
                         'SOLUTION', _toggleSolution,
@@ -1264,7 +1298,7 @@ class _PuzzleScreenState extends State<PuzzleScreen>
     return GestureDetector(
       onTap: enabled ? onTap : null,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
         decoration: BoxDecoration(
           color: active ? const Color(0xff1b1606) : const Color(0xff0a1018),
           borderRadius: BorderRadius.circular(10),
@@ -1308,6 +1342,7 @@ class _PuzzlePainter extends CustomPainter {
   final double     measureT;  // 0 → 1 entangled collapse flash
   final Color      accent;
   final bool       penrose;   // tilt the board 45° (spacetime-diagram skin)
+  final List<int>  hintCells;  // a few next-step hint cells to highlight
 
   static const Color _portal  = Color(0xff37e0d0);  // wormhole teal
   static const Color _boson   = Color(0xff66ffb0);  // boson / mass-gate green
@@ -1342,6 +1377,7 @@ class _PuzzlePainter extends CustomPainter {
     required this.measureT,
     required this.accent,
     required this.penrose,
+    required this.hintCells,
   });
 
   // ── Collapse timeline ─────────────────────────────────────────────────────
@@ -1847,6 +1883,20 @@ class _PuzzlePainter extends CustomPainter {
           Paint()..color = Colors.white.withValues(alpha: done ? 0.5 : 0.25));
       }
     });
+
+    // ── Hint markers (next-step nudge) ──────────────────────────────────────
+    // Pulsing rings on the next correct cells; brightest for the immediate step,
+    // fading along the short look-ahead.
+    for (var i = 0; i < hintCells.length; i++) {
+      final p = center(hintCells[i]);
+      final a = (1.0 - i * 0.28).clamp(0.3, 1.0);
+      canvas.drawCircle(p, cell * 0.30 + pulseV * 4, Paint()
+        ..color = const Color(0xff9fe8ff).withValues(alpha: a * (0.35 + pulseV * 0.45))
+        ..style = PaintingStyle.stroke ..strokeWidth = 2.5
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2));
+      canvas.drawCircle(p, cell * 0.12,
+        Paint()..color = const Color(0xffd8f4ff).withValues(alpha: a * 0.7));
+    }
 
     // ── Black-hole "not yet" warning ────────────────────────────────────────
     // Expanding red ring when the player tries to enter the Black Hole before
