@@ -1,0 +1,75 @@
+<!DOCTYPE html><html><head><meta charset="utf-8"><style>
+  html,body{margin:0;padding:0;background:transparent}
+  canvas{display:block}
+</style></head><body>
+<canvas id="c" width="1024" height="1024"></canvas>
+<script>
+const ctx = document.getElementById('c').getContext('2d');
+const S = 1024, cx = 512, cy = 512;
+const coreR = 138;
+// '?fg' → the Android adaptive *foreground*: same art, scaled into the safe zone
+// (launchers may zoom/mask the outer ~⅓), over the same deep-space backdrop.
+const fg = location.search.indexOf('fg') >= 0;
+
+// ── Deep-space background (opaque; matches the game's #04050a) ───────────────
+const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, 760);
+g.addColorStop(0, '#0b1626');
+g.addColorStop(0.55, '#070b14');
+g.addColorStop(1, '#03040a');
+ctx.fillStyle = g; ctx.fillRect(0, 0, S, S);
+
+// deterministic starfield
+let seed = 0x5EED;
+function rnd(){ seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff; }
+for (let i = 0; i < 90; i++) {
+  const x = rnd() * S, y = rnd() * S, r = rnd() * 1.9 + 0.4, a = rnd() * 0.55 + 0.15;
+  ctx.fillStyle = 'rgba(190,215,245,' + a + ')';
+  ctx.beginPath(); ctx.arc(x, y, r, 0, 7); ctx.fill();
+}
+
+// The hero composition (worldline + hole). For the adaptive foreground, scale it
+// down about centre so the launcher's mask/zoom never clips it.
+if (fg) { ctx.save(); ctx.translate(cx, cy); ctx.scale(0.74, 0.74); ctx.translate(-cx, -cy); }
+
+// ── Worldline: a glowing gold orthogonal trace plunging into the hole ────────
+// (grid right-angle turns = the in-game worldline aesthetic; drawn UNDER the
+//  core so its end is "consumed" by the singularity)
+const wl = new Path2D();
+wl.moveTo(322, 232);
+wl.lineTo(322, 352);
+wl.lineTo(556, 352);   // travels across the open space above the disk (visible)
+wl.lineTo(556, 480);   // then dives into the core (its end consumed by it)
+ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+ctx.shadowColor = 'rgba(255,194,77,0.85)'; ctx.shadowBlur = 38;
+ctx.strokeStyle = '#ffc24d'; ctx.lineWidth = 42; ctx.stroke(wl);
+ctx.shadowBlur = 0;
+ctx.strokeStyle = '#ffe6a8'; ctx.lineWidth = 18; ctx.stroke(wl);
+// leading particle (the head of the worldline)
+ctx.fillStyle = '#eaf4ff';
+ctx.shadowColor = 'rgba(150,200,255,0.9)'; ctx.shadowBlur = 22;
+ctx.beginPath(); ctx.arc(322, 232, 23, 0, 7); ctx.fill();
+ctx.shadowBlur = 0;
+
+// ── Accretion disk (orange, vertically squashed like in-game) ───────────────
+ctx.save();
+ctx.translate(cx, cy); ctx.scale(1, 0.34);
+ctx.shadowColor = 'rgba(255,140,40,0.6)'; ctx.shadowBlur = 30;
+ctx.lineWidth = 20; ctx.strokeStyle = 'rgba(255,119,34,0.95)';
+ctx.beginPath(); ctx.arc(0, 0, coreR * 1.75, 0, 7); ctx.stroke();
+ctx.shadowBlur = 0;
+ctx.lineWidth = 12; ctx.strokeStyle = 'rgba(255,170,51,0.45)';
+ctx.beginPath(); ctx.arc(0, 0, coreR * 2.25, 0, 7); ctx.stroke();
+ctx.restore();
+
+// ── Black hole core + purple event horizon ──────────────────────────────────
+ctx.fillStyle = 'rgba(187,85,255,0.22)';
+ctx.beginPath(); ctx.arc(cx, cy, coreR * 1.5, 0, 7); ctx.fill();
+ctx.fillStyle = '#000';
+ctx.beginPath(); ctx.arc(cx, cy, coreR, 0, 7); ctx.fill();
+ctx.shadowColor = 'rgba(187,85,255,0.9)'; ctx.shadowBlur = 34;
+ctx.lineWidth = 10; ctx.strokeStyle = '#bb55ff';
+ctx.beginPath(); ctx.arc(cx, cy, coreR, 0, 7); ctx.stroke();
+ctx.shadowBlur = 0;
+
+if (fg) { ctx.restore(); }
+</script></body></html>

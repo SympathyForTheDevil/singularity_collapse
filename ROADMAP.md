@@ -37,15 +37,14 @@ Cheap changes that improve feel and tidy the project before any store push.
 
 Required before any store release; self-contained.
 
-### App icon ☐
-- **Concept:** a black hole with an orange accretion disk and a single glowing
-  worldline curling into it — matches the in-game motif and the procedural aesthetic.
-- **Approach:** generate a 1024×1024 master PNG (can be produced procedurally via a
-  headless-render of a Canvas/SVG, consistent with how we mocked the bridge diagram),
-  then add the `flutter_launcher_icons` dev-dependency to emit all Android/iOS sizes.
-  Adaptive icon for Android (foreground = orb+worldline, background = deep space).
-- **Touch-points:** `pubspec.yaml` (icon config), generated `mipmap-*` / iOS
-  `AppIcon.appiconset`.
+### App icon ✅
+- **Done.** Procedural master art (`assets/icon/icon_render.html`, headless-rendered
+  to `assets/icon/icon.png` + `icon_foreground.png`): a centered black hole with an
+  orange accretion disk, purple event horizon, and a glowing gold worldline being
+  consumed — matches the in-game motif. `flutter_launcher_icons` emits all Android
+  densities + adaptive icon (foreground scaled into the safe zone, background
+  `#04050a`) and the full iOS AppIcon set. Regenerate: re-render the HTML → re-run
+  `dart run flutter_launcher_icons`.
 
 ### Name decision ◐ — "Singularity" vs "Singularity: Collapse"
 - **For dropping "Collapse":** punchier, one word; the home screen *already* uses

@@ -46,6 +46,21 @@ dev_dependencies:
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
 
+  flutter_launcher_icons: ^0.14.1
+
+# App icon generation (run: dart run flutter_launcher_icons). The master art is
+# generated procedurally — see assets/icon/icon_render.html (a black hole with an
+# accretion disk + a gold worldline being consumed). Regenerate the PNGs from that
+# file, then re-run the tool.
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/icon/icon.png"
+  remove_alpha_ios: true
+  background_color_ios: "#04050a"
+  adaptive_icon_background: "#04050a"
+  adaptive_icon_foreground: "assets/icon/icon_foreground.png"
+
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
 
