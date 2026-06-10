@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'audio.dart';
 import 'daily_service.dart';
 import 'field_guide.dart';
+import 'progress_service.dart';
 import 'puzzle_model.dart';
 import 'puzzle_screen.dart';
 import 'quantum_setup.dart';
@@ -24,6 +25,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   bool _penrose     = ThemeService.penrose;
   bool _showDev     = false;
   RunDifficulty _entropyDiff = RunDifficulty.medium;
+  Map<RunDifficulty, int> _entropyBest = const {};
 
   late final AnimationController _pulse;
 
@@ -52,10 +54,14 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     final dn     = prefs.getString('entropy_difficulty');
     final diff   = RunDifficulty.values.firstWhere(
       (x) => x.name == dn, orElse: () => RunDifficulty.medium);
+    final best   = {
+      for (final d in RunDifficulty.values)
+        d: await ProgressService.bestEntropy(d.name),
+    };
     if (mounted) {
       setState(() {
         _solvedToday = solved; _streak = streak;
-        _entropyDiff = diff; _loaded = true;
+        _entropyDiff = diff; _entropyBest = best; _loaded = true;
       });
     }
   }
@@ -67,10 +73,11 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     _load();
   }
 
-  void _goEntropy(RunDifficulty d) {
+  Future<void> _goEntropy(RunDifficulty d) async {
     AudioService.instance.ui();
-    Navigator.push(context, MaterialPageRoute(
+    await Navigator.push(context, MaterialPageRoute(
       builder: (_) => PuzzleScreen(mode: PuzzleMode.entropy, difficulty: d)));
+    _load();   // refresh the best score after a run
   }
 
   Future<void> _saveDiff() async {
@@ -291,6 +298,17 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [for (final d in RunDifficulty.values) _diffChip(d)],
                     ),
+                    const SizedBox(height: 7),
+                    Builder(builder: (_) {
+                      final best = _entropyBest[_entropyDiff] ?? 0;
+                      return Text(
+                        best > 0 ? 'BEST  ·  $best' : 'NO RUNS YET',
+                        style: TextStyle(
+                          color: best > 0
+                            ? const Color(0xff8aa6bc) : const Color(0xff44607a),
+                          fontSize: 10, fontFamily: 'monospace', letterSpacing: 2,
+                          fontWeight: best > 0 ? FontWeight.bold : FontWeight.normal));
+                    }),
                     const SizedBox(height: 14),
 
                     // Quantum button (tailor-your-session: pick types + timed)
