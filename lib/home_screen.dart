@@ -1,5 +1,6 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'audio.dart';
 import 'daily_service.dart';
 import 'field_guide.dart';
@@ -22,6 +23,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   bool _muted       = AudioService.instance.muted;
   bool _penrose     = ThemeService.penrose;
   bool _showDev     = false;
+  RunDifficulty _entropyDiff = RunDifficulty.medium;
 
   late final AnimationController _pulse;
 
@@ -46,8 +48,15 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   Future<void> _load() async {
     final solved = await DailyService.isSolvedToday();
     final streak = await DailyService.getStreak();
+    final prefs  = await SharedPreferences.getInstance();
+    final dn     = prefs.getString('entropy_difficulty');
+    final diff   = RunDifficulty.values.firstWhere(
+      (x) => x.name == dn, orElse: () => RunDifficulty.medium);
     if (mounted) {
-      setState(() { _solvedToday = solved; _streak = streak; _loaded = true; });
+      setState(() {
+        _solvedToday = solved; _streak = streak;
+        _entropyDiff = diff; _loaded = true;
+      });
     }
   }
 
@@ -58,10 +67,15 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     _load();
   }
 
-  void _goInfinity() {
+  void _goEntropy(RunDifficulty d) {
     AudioService.instance.ui();
     Navigator.push(context, MaterialPageRoute(
-      builder: (_) => const PuzzleScreen(mode: PuzzleMode.infinity)));
+      builder: (_) => PuzzleScreen(mode: PuzzleMode.entropy, difficulty: d)));
+  }
+
+  Future<void> _saveDiff() async {
+    final p = await SharedPreferences.getInstance();
+    await p.setString('entropy_difficulty', _entropyDiff.name);
   }
 
   void _goQuantum() {
@@ -267,10 +281,16 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                     ),
                     const SizedBox(height: 14),
 
-                    // Infinity button
-                    _menuBtn('INFINITY MODE',
+                    // Entropy mode — high-score survival, pick a difficulty
+                    _menuBtn('ENTROPY',
+                      subtitle: 'SURVIVE · HIGH SCORE',
                       color: const Color(0xff44aaff),
-                      onTap: _goInfinity),
+                      onTap: () => _goEntropy(_entropyDiff)),
+                    const SizedBox(height: 8),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [for (final d in RunDifficulty.values) _diffChip(d)],
+                    ),
                     const SizedBox(height: 14),
 
                     // Quantum button (tailor-your-session: pick types + timed)
@@ -317,7 +337,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     setState(() => _showDev = false);
     Navigator.push(context, MaterialPageRoute(
       builder: (_) => PuzzleScreen(
-        mode: PuzzleMode.infinity,
+        mode: PuzzleMode.entropy,
         forceFeatures: features,
         fixedLevel: level,
         multiverseBoards: boards)));
@@ -396,6 +416,34 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       ),
     ),
   );
+
+  Widget _diffChip(RunDifficulty d) {
+    const labels = {
+      RunDifficulty.easy: 'EASY', RunDifficulty.medium: 'MEDIUM', RunDifficulty.hard: 'HARD',
+    };
+    const c = Color(0xff44aaff);
+    final sel = _entropyDiff == d;
+    return GestureDetector(
+      onTap: () {
+        AudioService.instance.ui();
+        setState(() => _entropyDiff = d);
+        _saveDiff();
+      },
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+        decoration: BoxDecoration(
+          color: sel ? c.withValues(alpha: 0.15) : const Color(0xff0a1018),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: sel ? c : const Color(0xff223344), width: 1.2)),
+        child: Text(labels[d]!,
+          style: TextStyle(
+            color: sel ? c : const Color(0xff5a7488), fontSize: 10,
+            fontFamily: 'monospace', fontWeight: FontWeight.bold, letterSpacing: 2)),
+      ),
+    );
+  }
 
   Widget _menuBtn(String label, {
     String? subtitle,

@@ -10,13 +10,18 @@ import 'progress_service.dart';
 import 'puzzle_model.dart';
 import 'theme_service.dart';
 
-enum PuzzleMode { daily, infinity, quantum }
+enum PuzzleMode { daily, entropy, quantum }
+
+/// Entropy-run difficulty — scales how fast entropy fills and the score reward.
+enum RunDifficulty { easy, medium, hard }
 
 /// Singularity: Collapse — the standalone puzzle. Drag one worldline that
 /// consumes cosmic objects in ascending order and fills every cell; reaching
 /// the Black Hole (the final cell) collapses the region into a larger one.
 class PuzzleScreen extends StatefulWidget {
   final PuzzleMode mode;
+  /// Difficulty for the Entropy run (ignored by other modes).
+  final RunDifficulty difficulty;
   /// Dev/test overrides: force a specific feature set and a fixed level.
   final Set<PuzzleFeature>? forceFeatures;
   final int? fixedLevel;
@@ -29,7 +34,8 @@ class PuzzleScreen extends StatefulWidget {
   final bool quantumTimed;
   const PuzzleScreen({
     super.key,
-    this.mode = PuzzleMode.infinity,
+    this.mode = PuzzleMode.entropy,
+    this.difficulty = RunDifficulty.medium,
     this.forceFeatures,
     this.fixedLevel,
     this.multiverseBoards,
@@ -159,22 +165,37 @@ class _PuzzleScreenState extends State<PuzzleScreen>
 
   bool get _isDaily    => widget.mode == PuzzleMode.daily;
   bool get _isQuantum  => widget.mode == PuzzleMode.quantum;
-  bool get _isInfinity => widget.mode == PuzzleMode.infinity;
+  bool get _isEntropy => widget.mode == PuzzleMode.entropy;
 
-  // ── Infinity entropy run (high-score survival) ──────────────────────────────
-  double _entropy   = 0;     // 0..1; fills while solving + on mistakes, run-wide
+  // ── Entropy run (high-score survival) ───────────────────────────────────────
+  double _entropy   = 0;     // 0..1; rises while solving + on mistakes, run-wide
   int    _runScore  = 0;     // accrues per board solved this run
-  int    _bestScore = 0;     // best Infinity run (loaded on game over)
+  int    _bestScore = 0;     // best run at this difficulty (loaded on game over)
   bool   _runOver   = false; // entropy hit 1.0 → run ended
   static const double _kEntBacktrack = 0.04;  // TUNE — entropy per backtrack
   static const double _kEntHint      = 0.06;  // TUNE — per hint
   static const double _kEntSolution  = 0.25;  // TUNE — per solution peek
   static const double _kEntVent      = 0.28;  // TUNE — relief on solving a board
-  /// Entropy added per second while a board is unsolved (steeper each level).
-  double _entropyRate(int lvl) => 0.005 * (1 + lvl * 0.09);   // TUNE
+  static const double _kEntStep      = 0.05;  // TUNE — entropy added per tick
+
+  /// Seconds between passive entropy ticks — gentler on Easy, harsher on Hard,
+  /// and tightening with depth. Medium ≈ every 9s early (per the "8–10" target).
+  int _entropyTick() {
+    final base = switch (widget.difficulty) {
+      RunDifficulty.easy   => 12,
+      RunDifficulty.medium => 9,
+      RunDifficulty.hard   => 6,
+    };
+    return (base - level ~/ 4).clamp(3, base);   // TUNE — speeds up as you go deep
+  }
+
+  /// Score reward multiplier per difficulty.
+  double _scoreMult() => switch (widget.difficulty) {
+    RunDifficulty.easy => 1.0, RunDifficulty.medium => 1.3, RunDifficulty.hard => 1.7,
+  };
 
   void _addEntropy(double d) {
-    if (!_isInfinity || _runOver) return;
+    if (!_isEntropy || _runOver) return;
     _entropy = (_entropy + d).clamp(0.0, 1.0);   // game-over is checked in the timer
   }
   /// Whether the timer is shown/relevant: always in Daily/Infinity; in Quantum
@@ -224,10 +245,11 @@ class _PuzzleScreenState extends State<PuzzleScreen>
               });
             }
           } else {
-            if (_isInfinity) {
-              // Score the board (depth × quality) and vent entropy for solving.
+            if (_isEntropy) {
+              // Score the board (depth × quality × difficulty) and vent entropy.
               final clean = !_backtracked && !_peeked;
-              _runScore += 50 + level * 15 + (clean ? 40 : 0) + max(0, 45 - _seconds);
+              final raw = 50 + level * 15 + (clean ? 40 : 0) + max(0, 45 - _seconds);
+              _runScore += (raw * _scoreMult()).round();
               _entropy = (_entropy - _kEntVent).clamp(0.0, 1.0);
             }
             _newPuzzle(advance: true);
@@ -300,9 +322,13 @@ class _PuzzleScreenState extends State<PuzzleScreen>
     _seconds = 0;
     _timer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (!mounted || solved || _paused || _cards.isNotEmpty || _runOver) return;
-      if (_isInfinity) _entropy = (_entropy + _entropyRate(level)).clamp(0.0, 1.0);
-      setState(() => _seconds++);
-      if (_isInfinity && _entropy >= 1.0) _triggerGameOver();
+      final s = _seconds + 1;
+      // Passive entropy ticks up once every _entropyTick() seconds.
+      if (_isEntropy && s % _entropyTick() == 0) {
+        _entropy = (_entropy + _kEntStep).clamp(0.0, 1.0);
+      }
+      setState(() => _seconds = s);
+      if (_isEntropy && _entropy >= 1.0) _triggerGameOver();
     });
   }
 
@@ -310,7 +336,7 @@ class _PuzzleScreenState extends State<PuzzleScreen>
     _stopTimer();
     HapticFeedback.heavyImpact();
     AudioService.instance.collapse();          // the heat-death sting
-    final best = await ProgressService.recordInfinity(_runScore);
+    final best = await ProgressService.recordEntropy(widget.difficulty.name, _runScore);
     if (mounted) setState(() { _runOver = true; _bestScore = best; });
   }
 
@@ -897,7 +923,7 @@ class _PuzzleScreenState extends State<PuzzleScreen>
                               child: Text(
                                 _isDaily ? 'DAILY  ·  $dateStr'
                                   : _isQuantum ? 'QUANTUM  ·  STAGE $level'
-                                  : 'COLLAPSE  ·  STAGE $level',
+                                  : 'ENTROPY  ·  STAGE $level',
                                 style: const TextStyle(
                                   color: _accent, fontSize: 18,
                                   fontFamily: 'monospace', letterSpacing: 4,
@@ -940,13 +966,13 @@ class _PuzzleScreenState extends State<PuzzleScreen>
                       Text(
                         _isDaily
                           ? '$filled / $total  CONSUMED'
-                          : _isInfinity
+                          : _isEntropy
                             ? '$filled / $total  CONSUMED      SCORE  $_runScore'
                             : '$filled / $total  CONSUMED      SOLVED  $solvedCount',
                         style: const TextStyle(
                           color: Color(0xff8aa6bc), fontSize: 12,
                           fontFamily: 'monospace', letterSpacing: 2)),
-                      if (_isInfinity) ...[
+                      if (_isEntropy) ...[
                         const SizedBox(height: 12),
                         _entropyBar(),
                       ],
@@ -1255,15 +1281,20 @@ class _PuzzleScreenState extends State<PuzzleScreen>
             color: const Color(0xff0e1c28),
             borderRadius: BorderRadius.circular(5),
             border: Border.all(color: const Color(0xff1c2e3c), width: 1)),
-          child: FractionallySizedBox(
-            alignment: Alignment.centerLeft,
-            widthFactor: e <= 0 ? 0.0 : e,
-            child: Container(decoration: BoxDecoration(
-              color: col,
-              borderRadius: BorderRadius.circular(5),
-              boxShadow: e > 0.7
-                ? [BoxShadow(color: col.withValues(alpha: 0.7), blurRadius: 8)]
-                : null)),
+          child: TweenAnimationBuilder<double>(
+            tween: Tween(end: e <= 0 ? 0.0 : e),
+            duration: const Duration(milliseconds: 700),
+            curve: Curves.easeOut,
+            builder: (_, v, _) => FractionallySizedBox(
+              alignment: Alignment.centerLeft,
+              widthFactor: v,
+              child: Container(decoration: BoxDecoration(
+                color: col,
+                borderRadius: BorderRadius.circular(5),
+                boxShadow: e > 0.7
+                  ? [BoxShadow(color: col.withValues(alpha: 0.7), blurRadius: 8)]
+                  : null)),
+            ),
           ),
         ),
       ]),

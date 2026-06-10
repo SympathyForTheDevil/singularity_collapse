@@ -7,8 +7,12 @@ not from the board. Three modes now have distinct identities:
 | Mode | Identity | Stakes |
 |---|---|---|
 | **Quantum** | Customizable safe haven — pure puzzle fun | none (no entropy, no fail) |
-| **Infinity** | Endless high-score survival | entropy; fill the bar → run over |
+| **Entropy** | Endless high-score survival (was "Infinity") | entropy; fill the bar → HEAT DEATH |
 | **Descent** | Finite-act roguelike toward a final boss | entropy + choices + relics |
+
+> **Entropy** has **Easy / Medium / Hard** (`RunDifficulty`): difficulty sets the
+> passive-tick interval (Easy 12s · Medium 9s · Hard 6s, tightening with depth)
+> and a score multiplier (1.0 / 1.3 / 1.7). Best score is kept per difficulty.
 
 ---
 

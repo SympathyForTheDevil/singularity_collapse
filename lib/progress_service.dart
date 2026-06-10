@@ -69,19 +69,19 @@ class ProgressService {
     await p.setString(_key, jsonEncode(m));
   }
 
-  // ── Infinity high score (entropy survival run) ──────────────────────────────
-  static const _bestKey = 'infinity_best';
+  // ── Entropy-run high score (per difficulty: easy/medium/hard) ───────────────
+  static String _bestKey(String diff) => 'entropy_best_$diff';
 
-  static Future<int> bestInfinity() async {
+  static Future<int> bestEntropy(String diff) async {
     final p = await SharedPreferences.getInstance();
-    return p.getInt(_bestKey) ?? 0;
+    return p.getInt(_bestKey(diff)) ?? 0;
   }
 
-  /// Record an Infinity run score, keeping the best. Returns the best after.
-  static Future<int> recordInfinity(int score) async {
+  /// Record an entropy-run score at [diff], keeping the best. Returns best after.
+  static Future<int> recordEntropy(String diff, int score) async {
     final p = await SharedPreferences.getInstance();
-    final best = p.getInt(_bestKey) ?? 0;
-    if (score > best) { await p.setInt(_bestKey, score); return score; }
+    final best = p.getInt(_bestKey(diff)) ?? 0;
+    if (score > best) { await p.setInt(_bestKey(diff), score); return score; }
     return best;
   }
 }
