@@ -1,26 +1,51 @@
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// Per-day daily-puzzle results, for medals + the star-map. Stored as a single
-/// JSON map { 'YYYY-MM-DD': medal } where medal is 1=Bronze, 2=Silver, 3=Gold
-/// (0 = unsolved). Only the *best* medal for a day is kept.
+/// Per-day daily-puzzle results, stored as { 'YYYY-MM-DD': badgeMask }. Each solve
+/// earns a set of collectible achievement badges (a bitmask), not a single tier.
 class ProgressService {
-  static const _key = 'daily_medals';
+  static const _key = 'daily_badges';
 
-  // Medal tiers.
-  static const int none = 0, bronze = 1, silver = 2, gold = 3;
-  static const List<String> medalName = ['—', 'BRONZE', 'SILVER', 'GOLD'];
-  static const List<String> medalNote =
-      ['', 'SOLVED', 'UNDER PAR', 'FLAWLESS · NO BACKTRACKS'];
+  // ── Achievement badges (bit flags) ─────────────────────────────────────────
+  static const int perfect = 1;   // no backtracks
+  static const int unaided = 2;   // never revealed the solution
+  static const int swift   = 4;   // solved under par
+  static const int blazing = 8;   // solved under half par
 
-  /// Par time (seconds) for a board of [cells] — under it earns at least Silver.
-  /// A gentle, beatable target; tune with playtest.
+  /// Display order.
+  static const List<int> order = [perfect, unaided, swift, blazing];
+
+  static String nameOf(int flag) => switch (flag) {
+    perfect => 'PERFECT',
+    unaided => 'UNAIDED',
+    swift   => 'SWIFT',
+    _       => 'BLAZING',
+  };
+  static String noteOf(int flag) => switch (flag) {
+    perfect => 'NO BACKTRACKS',
+    unaided => 'NO PEEK',
+    swift   => 'UNDER PAR',
+    _       => 'HALF PAR',
+  };
+
+  /// Par time (seconds) for a board of [cells]; under it earns SWIFT. Gentle and
+  /// board-scaled so the speed badges stay earnable on big boards. Tune by playtest.
   static int parSeconds(int cells) => (cells * 1.7).round();
 
-  /// The medal earned for a solve: Gold for a clean (no-backtrack) solve, else
-  /// Silver if under par, else Bronze.
-  static int medalFor({required bool backtracked, required int seconds, required int parSec}) =>
-      !backtracked ? gold : (seconds <= parSec ? silver : bronze);
+  /// The badge bitmask earned for a solve.
+  static int badgesFor({
+    required bool backtracked,
+    required bool peeked,
+    required int seconds,
+    required int parSec,
+  }) {
+    var b = 0;
+    if (!backtracked)                  b |= perfect;
+    if (!peeked)                       b |= unaided;
+    if (seconds <= parSec)             b |= swift;
+    if (seconds <= (parSec / 2).round()) b |= blazing;
+    return b;
+  }
 
   static Future<Map<String, int>> all() async {
     final p = await SharedPreferences.getInstance();
@@ -34,12 +59,13 @@ class ProgressService {
     }
   }
 
-  /// Record [medal] for [date], keeping the best result for that day.
-  static Future<void> record(String date, int medal) async {
+  /// Record [badges] for [date], OR-ing with anything already earned that day.
+  static Future<void> record(String date, int badges) async {
     final p = await SharedPreferences.getInstance();
     final m = await all();
-    if ((m[date] ?? 0) >= medal) return;
-    m[date] = medal;
+    final merged = (m[date] ?? 0) | badges;
+    if (merged == (m[date] ?? -1)) return;
+    m[date] = merged;
     await p.setString(_key, jsonEncode(m));
   }
 }

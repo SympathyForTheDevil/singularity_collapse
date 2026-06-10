@@ -6,6 +6,7 @@ typedef SolveResult = ({int streak, int freezes, bool freezeUsed, bool freezeEar
 class DailyService {
   static const _keyLastSolved = 'last_solved_date';
   static const _keyStreak     = 'streak';
+  static const _keyMaxStreak  = 'max_streak';
   static const _keyFreezes    = 'streak_freezes';
 
   /// A streak freeze covers one missed day, protecting the streak. You earn one
@@ -45,6 +46,16 @@ class DailyService {
   static Future<int> getFreezes() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getInt(_keyFreezes) ?? 0;
+  }
+
+  static Future<int> getMaxStreak() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getInt(_keyMaxStreak) ?? 0;
+  }
+
+  static Future<String?> getLastSolved() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_keyLastSolved);
   }
 
   /// Marks today solved and updates the streak + freeze tokens:
@@ -99,6 +110,9 @@ class DailyService {
     await prefs.setString(_keyLastSolved, today);
     await prefs.setInt(_keyStreak, streak);
     await prefs.setInt(_keyFreezes, freezes);
+    if (streak > (prefs.getInt(_keyMaxStreak) ?? 0)) {
+      await prefs.setInt(_keyMaxStreak, streak);
+    }
     return (streak: streak, freezes: freezes,
             freezeUsed: freezeUsed, freezeEarned: freezeEarned);
   }

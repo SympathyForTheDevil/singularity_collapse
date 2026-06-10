@@ -6,7 +6,7 @@ import 'field_guide.dart';
 import 'puzzle_model.dart';
 import 'puzzle_screen.dart';
 import 'quantum_setup.dart';
-import 'star_map.dart';
+import 'streak_screen.dart';
 import 'theme_service.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -127,7 +127,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                 onTap: () {
                   AudioService.instance.ui();
                   Navigator.push(context, MaterialPageRoute(
-                    builder: (_) => const StarMapScreen()));
+                    builder: (_) => const StreakScreen()));
                 },
                 child: Container(
                   width: 40, height: 40,
@@ -136,7 +136,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                     borderRadius: BorderRadius.circular(8),
                     border: Border.all(color: const Color(0xff223344), width: 1),
                   ),
-                  child: const Icon(Icons.auto_awesome,
+                  child: const Icon(Icons.local_fire_department,
                     color: Color(0xff7799aa), size: 20),
                 ),
               ),

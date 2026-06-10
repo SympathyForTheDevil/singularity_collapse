@@ -108,8 +108,9 @@ class _PuzzleScreenState extends State<PuzzleScreen>
   int  solvedCount = 0;
   bool solved      = false;
   bool _showShare  = false;
-  bool _backtracked = false;   // any undo/reset this solve → no Gold (daily medals)
-  int  _lastMedal   = 0;       // medal earned on the just-finished daily
+  bool _backtracked = false;   // any undo/reset this solve → forfeits PERFECT
+  bool _peeked      = false;   // revealed the solution this solve → forfeits UNAIDED
+  int  _lastBadges  = 0;       // achievement badges earned on the just-finished daily
   bool _freezeUsed  = false;   // a streak freeze saved the streak this solve
   bool _freezeEarned = false;  // earned a freeze this solve (7-day milestone)
   bool _paused     = false;
@@ -185,18 +186,19 @@ class _PuzzleScreenState extends State<PuzzleScreen>
       ..addStatusListener((s) async {
         if (s == AnimationStatus.completed && mounted) {
           if (_isDaily) {
-            final res   = await DailyService.markSolvedAndGetStreak();
-            final medal = ProgressService.medalFor(
+            final res    = await DailyService.markSolvedAndGetStreak();
+            final badges = ProgressService.badgesFor(
               backtracked: _backtracked,
+              peeked: _peeked,
               seconds: _seconds,
               parSec: ProgressService.parSeconds(grid.cellCount));
-            await ProgressService.record(DailyService.todayStr(), medal);
+            await ProgressService.record(DailyService.todayStr(), badges);
             if (mounted) {
               setState(() {
                 _streak = res.streak;
                 _freezeUsed = res.freezeUsed;
                 _freezeEarned = res.freezeEarned;
-                _lastMedal = medal;
+                _lastBadges = badges;
                 _showShare = true;
               });
             }
@@ -325,7 +327,8 @@ class _PuzzleScreenState extends State<PuzzleScreen>
     solved      = false;
     _showShare  = false;
     _backtracked = false;
-    _lastMedal  = 0;
+    _peeked     = false;
+    _lastBadges = 0;
     _freezeUsed = false;
     _freezeEarned = false;
     _clearHint();
@@ -728,6 +731,7 @@ class _PuzzleScreenState extends State<PuzzleScreen>
     AudioService.instance.ui();
     setState(() => _showSolution = !_showSolution);
     if (_showSolution) {
+      _peeked = true;          // revealing the answer forfeits the UNAIDED badge
       _trace.repeat();
     } else {
       _trace.stop();
@@ -748,9 +752,11 @@ class _PuzzleScreenState extends State<PuzzleScreen>
     final buf     = StringBuffer()
       ..writeln('Singularity: Collapse')
       ..writeln('Daily Region $today ✅');
-    if (_lastMedal > 0) {
-      const emoji = ['', '🥉', '🥈', '🥇'];
-      buf.writeln('${emoji[_lastMedal]} ${ProgressService.medalName[_lastMedal]}');
+    if (_lastBadges > 0) {
+      final names = ProgressService.order
+          .where((f) => (_lastBadges & f) != 0)
+          .map(ProgressService.nameOf);
+      buf.writeln('🏅 ${names.join(' · ')}');
     }
     if (_timed) buf.writeln('Time: ${_formatTime(_seconds)}');
     if (_streak > 0) buf.writeln('Streak 🔥 $_streak');
@@ -1100,32 +1106,43 @@ class _PuzzleScreenState extends State<PuzzleScreen>
     ),
   );
 
-  // Daily medal palette: —, Bronze, Silver, Gold.
-  static const List<Color> _medalColors = [
-    Color(0xff8899aa), Color(0xffcd7f32), Color(0xffc8d2dc), Color(0xffffc24d),
-  ];
+  // Achievement-badge icon + colour for a flag.
+  static (IconData, Color) _badgeStyle(int flag) => switch (flag) {
+    ProgressService.perfect => (Icons.verified, Color(0xff66ffb0)),
+    ProgressService.unaided => (Icons.visibility_off, Color(0xff7fd8ff)),
+    ProgressService.swift   => (Icons.bolt, Color(0xffffc24d)),
+    _                       => (Icons.local_fire_department, Color(0xffff7a4d)),
+  };
 
-  Widget _medalBadge(int medal) {
-    final c = _medalColors[medal];
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(medal == ProgressService.gold
-              ? Icons.workspace_premium : Icons.military_tech,
-          color: c, size: 44,
-          shadows: [Shadow(color: c.withValues(alpha: 0.6), blurRadius: 16)]),
-        const SizedBox(height: 4),
-        Text(ProgressService.medalName[medal],
-          style: TextStyle(
-            color: c, fontSize: 16, fontFamily: 'monospace',
-            fontWeight: FontWeight.bold, letterSpacing: 3,
-            shadows: [Shadow(color: c.withValues(alpha: 0.5), blurRadius: 12)])),
-        const SizedBox(height: 3),
-        Text(ProgressService.medalNote[medal],
-          style: const TextStyle(
-            color: Color(0xff8aa6bc), fontSize: 9,
-            fontFamily: 'monospace', letterSpacing: 2)),
-      ],
+  Widget _badgeRow(int badges) {
+    final earned = ProgressService.order.where((f) => (badges & f) != 0).toList();
+    return Wrap(
+      alignment: WrapAlignment.center,
+      spacing: 10, runSpacing: 8,
+      children: [for (final f in earned) _badgeChip(f)],
+    );
+  }
+
+  Widget _badgeChip(int flag) {
+    final (icon, c) = _badgeStyle(flag);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: c.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: c.withValues(alpha: 0.55)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: c, size: 16),
+          const SizedBox(width: 6),
+          Text(ProgressService.nameOf(flag),
+            style: TextStyle(
+              color: c, fontSize: 11, fontFamily: 'monospace',
+              fontWeight: FontWeight.bold, letterSpacing: 1.5)),
+        ],
+      ),
     );
   }
 
@@ -1143,9 +1160,9 @@ class _PuzzleScreenState extends State<PuzzleScreen>
                 fontWeight: FontWeight.bold, letterSpacing: 4,
                 shadows: [Shadow(color: Color(0xffbb55ff), blurRadius: 20)])),
 
-            if (_isDaily && _lastMedal > 0) ...[
+            if (_isDaily && _lastBadges > 0) ...[
               const SizedBox(height: 16),
-              _medalBadge(_lastMedal),
+              _badgeRow(_lastBadges),
             ],
 
             if (_timed && _seconds > 0) ...[

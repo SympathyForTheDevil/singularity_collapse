@@ -69,12 +69,18 @@ Required before any store release; self-contained.
 
 The engagement engine. Builds on the existing `DailyService` (streak, daily seed).
 
-- ✅ **Par + medals per daily** — Bronze = solve, Silver = under par, Gold = clean
-  (no backtracks). `ProgressService` persists the best medal per day; computed on a
-  daily solve and shown as a badge in the collapse/share overlay + share text.
-- ✅ **Star-map constellation** — `StarMapScreen` (home ✨ icon): the current month
-  as a 7-wide grid where each solved day is a star coloured by its medal, plus a
-  streak / this-month / gold stat strip. Reads `ProgressService.all()`.
+- ✅ **Achievement badges per daily** (revamped from tiered medals) — collectible
+  per-solve badges (a bitmask): PERFECT (no backtracks), UNAIDED (no solution peek),
+  SWIFT (under par), BLAZING (under ½ par). Speed badges scale with board size so
+  they stay earnable. Shown as chips in the collapse/share overlay + share text;
+  `ProgressService` persists the per-day badge mask.
+- ✅ **Streak screen** (revamped from the monthly star-map) — `StreakScreen` (home
+  🔥 icon): big N-day-streak headline, the **current week** strip (check / freeze /
+  missed), freeze tokens, a solves/current/best stat strip, and a horizontal ladder
+  of **astrophysics-named milestone awards** (3 Photon · 5 Particle · 7 Asteroid ·
+  31 Moon · 50 Planet · 100 Star · 150 Neutron Star · 200 Supernova · 250 Nebula ·
+  300 Quasar · 365 Galaxy · 500 Singularity · 1000 Big Bang), achieved vs locked,
+  with the next goal highlighted. `DailyService` now tracks max streak.
 - ✅ **Streak-freeze token** — earn 1 every 7 consecutive days (cap 2); auto-consumed
   to bridge a missed day so the streak survives. `DailyService.markSolvedAndGetStreak`
   returns `(streak, freezes, freezeUsed, freezeEarned)`; surfaced in the collapse

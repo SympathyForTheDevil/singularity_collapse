@@ -267,17 +267,25 @@ void main() {
     expect(entangledSeen, greaterThan(15));
   });
 
-  test('daily medals: gold = clean, silver = under par, bronze = solved', () {
+  test('daily badges: earned per independent condition', () {
     const par = 50;
-    // Gold for a clean (no-backtrack) solve, regardless of time.
-    expect(ProgressService.medalFor(backtracked: false, seconds: 999, parSec: par),
-        ProgressService.gold);
-    // Silver: backtracked but under par.
-    expect(ProgressService.medalFor(backtracked: true, seconds: 40, parSec: par),
-        ProgressService.silver);
-    // Bronze: backtracked and over par.
-    expect(ProgressService.medalFor(backtracked: true, seconds: 80, parSec: par),
-        ProgressService.bronze);
+    int b(bool bt, bool pk, int s) =>
+        ProgressService.badgesFor(backtracked: bt, peeked: pk, seconds: s, parSec: par);
+
+    // A flawless fast solve earns all four.
+    final all = b(false, false, 20);   // 20 <= 25 (half par)
+    expect((all & ProgressService.perfect) != 0, isTrue);
+    expect((all & ProgressService.unaided) != 0, isTrue);
+    expect((all & ProgressService.swift)   != 0, isTrue);
+    expect((all & ProgressService.blazing) != 0, isTrue);
+
+    // A messy, peeked, slow solve earns none.
+    expect(b(true, true, 80), 0);
+
+    // Under par but not half-par → SWIFT, not BLAZING.
+    final swift = b(true, true, 40);
+    expect((swift & ProgressService.swift)   != 0, isTrue);
+    expect((swift & ProgressService.blazing) != 0, isFalse);
   });
 
   test('forced features appear regardless of level', () {
