@@ -20,6 +20,8 @@ const List<MusicTrack> kMusicTracks = [
   MusicTrack('bach_prelude', 'Prelude in C', 'J.S. Bach'),
   MusicTrack('satie_gymnopedie', 'Gymnopédie No. 1', 'Erik Satie'),
   MusicTrack('chopin_prelude_a', 'Prelude in A', 'F. Chopin'),
+  MusicTrack('korobeiniki', 'Korobeiniki', 'Russian folk'),
+  MusicTrack('bach_menuet', 'Menuet, BWV 814', 'J.S. Bach'),
 ];
 
 /// All game audio. Hybrid design:
@@ -581,6 +583,10 @@ class AudioService with WidgetsBindingObserver {
         return _satieGymnopedie();
       case 'chopin_prelude_a':
         return _chopinPreludeInA();
+      case 'korobeiniki':
+        return _korobeiniki();
+      case 'bach_menuet':
+        return _bachMenuet();
       default:
         return null;
     }
@@ -721,6 +727,61 @@ class AudioService with WidgetsBindingObserver {
 
     return _MusicPiece(64, 12, notes,             // 4 bars of 3/4
       melodyDecay: 2.2, melodyRing: 2.0, bassDecay: 1.6, bassRing: 2.4);
+  }
+
+  /// Korobeiniki — the traditional Russian folk tune used as the Tetris Type-A
+  /// theme (A minor, 4/4). The full 8-bar theme (phrase A + the higher phrase B),
+  /// melody only, on the plucky music-box voice (a nod to the chiptune original).
+  /// Pitch sequence verified; phrase-B rhythm is a standard reconstruction.
+  _MusicPiece _korobeiniki() {
+    final notes = <_Note>[];
+    void n(int midi, double beat) => notes.add(_Note(midi, beat, vel: 0.5));
+    // Phrase A (bars 1–4): E B C D C B | A A C E D C | B(.) C D E | C A A
+    n(76, 0); n(71, 1); n(72, 1.5); n(74, 2); n(72, 3); n(71, 3.5);
+    n(69, 4); n(69, 5); n(72, 5.5); n(76, 6); n(74, 7); n(72, 7.5);
+    n(71, 8); n(72, 9.5); n(74, 10); n(76, 11);
+    n(72, 12); n(69, 13); n(69, 14);
+    // Phrase B (bars 5–8): D F A G F E | C E D C B B | C D E | C A A
+    n(74, 16); n(77, 17); n(81, 17.5); n(79, 18); n(77, 19); n(76, 19.5);
+    n(72, 20); n(76, 21); n(74, 22); n(72, 22.5); n(71, 23); n(71, 23.5);
+    n(72, 24); n(74, 25); n(76, 26);
+    n(72, 28); n(69, 29); n(69, 30);
+    return _MusicPiece(132, 32, notes);           // 8 bars of 4/4
+  }
+
+  /// Bach — Menuet from French Suite No. 3 in B minor, BWV 814 (3/4), bars 1–8.
+  /// The two-voice texture (running treble + bass) that Game Boy Tetris's "Music
+  /// B" was arranged from. Pitches verified by converting Mutopia's public-domain
+  /// LilyPond source to MIDI deterministically (no hand-transcription).
+  _MusicPiece _bachMenuet() {
+    const high = <List<int>>[                      // 6 eighth-notes per bar
+      [74, 78, 83, 78, 73, 78], [74, 78, 71, 78, 70, 78],
+      [71, 78, 83, 78, 73, 78], [74, 78, 71, 78, 70, 78],
+      [74, 78, 74, 71, 79, 76], [73, 76, 73, 69, 78, 74],
+      [71, 78, 76, 74, 73, 71], [70, 66, 70, 73, 78, 76],
+    ];
+    const lowQ = <List<int>>[                       // 3 quarter-notes per bar
+      [59, 47, 58], [59, 62, 66], [62, 59, 58], [59, 50, 54],
+      [47, 59, 52], [45, 57, 50], [43, 55, 52],
+    ];
+    const low8 = [54, 55, 54, 52, 50, 49];          // bar 8 — running eighths
+    final notes = <_Note>[];
+    for (var b = 0; b < high.length; b++) {
+      final base = b * 3.0;
+      for (var i = 0; i < 6; i++) {
+        notes.add(_Note(high[b][i], base + i * 0.5, vel: 0.5));
+      }
+    }
+    for (var b = 0; b < lowQ.length; b++) {
+      final base = b * 3.0;
+      for (var i = 0; i < 3; i++) {
+        notes.add(_Note(lowQ[b][i], base + i, vel: 0.42));
+      }
+    }
+    for (var i = 0; i < 6; i++) {
+      notes.add(_Note(low8[i], 21 + i * 0.5, vel: 0.42));
+    }
+    return _MusicPiece(104, 24, notes);             // 8 bars of 3/4
   }
 
   /// 16-bit mono PCM WAV wrapper around float samples in [-1, 1].

@@ -140,10 +140,14 @@ through a global Freeverb send for a cosmic space:
   `_MusicPiece` (melody/bass decay + ring): plucky music-box (Bach) vs legato
   (Satie). **Shipped:** Bach — Prelude in C (BWV 846, mm. 1–4, I→ii⁷→V⁷→I
   arpeggio); Satie — Gymnopédie No. 1 (Gmaj7↔Dmaj7 vamp + verified main phrase);
-  Chopin — Prelude in A, Op. 28 No. 7 (bars 1–4, the E7→A mazurka gesture). All
-  pitches verified against Mutopia's public-domain LilyPond sources (relative-
-  octave notation parsed). **Planned:** Debussy Clair de Lune — add a `_pieceFor`
-  case + a `kMusicTracks` entry (verify melody pitches against an open score). On-theme nod: GB Tetris "Music B" was a
+  Chopin — Prelude in A, Op. 28 No. 7 (bars 1–4, the E7→A mazurka gesture);
+  Korobeiniki (the Tetris Type-A folk theme, A minor, melody only); Bach — Menuet
+  from French Suite No. 3, BWV 814 (bars 1–8, two voices — the source of GB
+  Tetris "Music B"). Classical pitches verified against Mutopia's public-domain
+  LilyPond (relative-octave notation parsed, or converted to MIDI deterministically
+  via a throwaway Dart tool for the dense Menuet). **Planned:** Tchaikovsky — Dance
+  of the Sugar Plum Fairy (needs clean verified note data — it's chromatic, don't
+  guess); Debussy Clair de Lune (rubato — doesn't reduce cleanly to a beat grid). On-theme nod: GB Tetris "Music B" was a
   chiptune Bach minuet. Chosen via the **Settings screen** (`settings_screen.dart`,
   ⚙ tune icon on Home).
 
