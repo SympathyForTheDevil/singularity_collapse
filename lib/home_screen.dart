@@ -84,6 +84,15 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   @override
   Widget build(BuildContext context) {
     final today = DailyService.todayStr();
+
+    // A tongue-in-cheek arXiv preprint id for the title masthead — date-stable so
+    // it reads as "real" (YYMM + a plausible 5-digit number; the 6608 nods to the
+    // daily epoch, June 8). Pure flavour.
+    final now    = DateTime.now();
+    final doy    = now.difference(DateTime(now.year, 1, 1)).inDays + 1;
+    final arxivN = ((doy * 271 + 6608) % 100000).toString().padLeft(5, '0');
+    final arxiv  = 'arXiv:${now.year % 100}'
+        '${now.month.toString().padLeft(2, '0')}.$arxivN  [gr-qc]';
     return Scaffold(
       backgroundColor: const Color(0xff04050a),
       body: SafeArea(
@@ -174,7 +183,22 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                         color: Color(0xff99bbcc), fontSize: 12,
                         fontFamily: 'monospace', letterSpacing: 4)),
 
-                    const SizedBox(height: 44),
+                    const SizedBox(height: 12),
+                    // Paper-style tagline + a fake arXiv citation (masthead flavour).
+                    Text('A Hamiltonian Path to the Singularity',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: _gold.withValues(alpha: 0.5), fontSize: 10.5,
+                        fontFamily: 'monospace', fontStyle: FontStyle.italic,
+                        letterSpacing: 1)),
+                    const SizedBox(height: 5),
+                    Text(arxiv,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        color: Color(0xff3a526a), fontSize: 8.5,
+                        fontFamily: 'monospace', letterSpacing: 1)),
+
+                    const SizedBox(height: 40),
 
                     // Black hole orb — pulsing purple glow
                     AnimatedBuilder(
