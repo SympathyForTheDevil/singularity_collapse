@@ -32,16 +32,25 @@ Same PAT as the arcade game (fine-grained, scoped to this repo).
 
 ```
 lib/
-  main.dart          App entry, portrait lock, CollapseApp
+  main.dart          App entry, portrait lock, CollapseApp; loads Theme/Quantum services
   cosmic.dart        CosmicTier data class, kLowerTiers, kBlackHole, tierFor()
   puzzle_model.dart  PuzzleGrid: guaranteed-solvable generation + all rules
-  puzzle_screen.dart PuzzleScreen StatefulWidget + _PuzzlePainter CustomPainter
+  puzzle_screen.dart PuzzleScreen StatefulWidget + _PuzzlePainter; all 3 modes live here
+  home_screen.dart   Home menu (Daily / Entropy+difficulty / Quantum), top-bar toggles
+  audio.dart         AudioService — procedural SoLoud engine
+  field_guide.dart   GuideEntry/GuideService, tutorial cards, FieldGuideScreen + icons
+  daily_service.dart Daily seed/level + streak + freeze tokens
+  progress_service.dart Per-day daily badges + Entropy best score (per difficulty)
+  streak_screen.dart StreakScreen — week strip, freezes, astrophysics milestone ladder
   theme_service.dart Persisted cosmetic board themes (Penrose 45° skin)
   quantum_setup.dart QuantumSetupScreen — tailor-your-session picker (types + timed)
   quantum_service.dart Persisted Quantum-mode config (chosen types, normal, timed)
 test/
-  widget_test.dart   Engine unit tests (solvability, endpoint pinning, wall rules)
+  widget_test.dart   Engine + medal/streak/freeze unit tests
 ```
+
+**Docs:** `ROADMAP.md` (phased plan, ✅/◐/☐ status — the source of truth for "what's
+next") and `DESCENT.md` (the Entropy/stakes design + the planned Descent roguelike).
 
 ---
 
@@ -97,8 +106,10 @@ through a global Freeverb send for a cosmic space:
   the designed "impact one-shot" slot: to swap in a produced sample, drop a file
   in `assets/audio/` and load it in `_buildSounds` via `_soloud.loadAsset(...)`.
 - **Ambient pad** — seamless 8 s loop (all partials loop-locked to 1/dur), faded
-  in per screen; calmer in Zen. Started in `PuzzleScreen.initState`, stopped in
-  `dispose`.
+  in per screen; calmer when untimed (`calm: !_timed`, e.g. a RELAXED Quantum run).
+  Started in `PuzzleScreen.initState`, stopped in `dispose`.
+- **Bridge** (`bridge()`) — deep rising sweep into a bright emergence chord, for a
+  multiverse bridge crossing (distinct from the wormhole `warp()`).
 - **Mute** — toggle on the home screen, persisted via `shared_preferences`
   (`audio_muted`); `AudioService.muted` is honoured by every play call.
 
@@ -156,6 +167,40 @@ quantumTimed`) gates the timer display + ambient calm + share-card time. Config 
 First open pre-selects all unlocked types. **Premium hook:** the picker is the natural
 paywall surface — gate entry to `QuantumSetupScreen` behind a purchase flag when
 monetization lands (no gate yet).
+
+**The three modes (`PuzzleMode`).**
+- **Daily** — date-seeded board (`DailyService.todaySeed`), timed, shareable; earns
+  badges + drives the streak.
+- **Entropy** (was "Infinity"; `PuzzleMode.entropy`) — endless **high-score survival**.
+  See below.
+- **Quantum** — the customizable safe haven (above); no stakes.
+
+**Entropy mode (high-score survival).** A run-wide **entropy meter** (`_entropy`, 0..1)
+is the fail state. It **rises** on a passive interval tick (`_entropyTick()` seconds:
+Easy 12 / Medium 9 / Hard 6, tightening with depth; `+_kEntStep` each) and on mistakes
+(`_addEntropy`: backtrack/hint/solution costs — so PERFECT/UNAIDED play is survival
+skill). **Solving vents it** (`_kEntVent`) and **scores** the board
+(`base + level + clean + speed`, × difficulty multiplier 1.0/1.3/1.7). Fill the bar
+mid-board → **HEAT DEATH** overlay (score + best + NEW RUN). Best score is per-difficulty
+(`ProgressService.bestEntropy/recordEntropy`, shown on the home difficulty chips). All
+magnitudes are `// TUNE` constants — **needs an on-device balance pass**.
+`RunDifficulty {easy,medium,hard}` is chosen on the home chips (persisted
+`entropy_difficulty`). Daily & Quantum have **no** entropy.
+
+**Daily meta-progression.**
+- **Badges** (`ProgressService`, per-day bitmask) — collectible per-solve achievements:
+  PERFECT (no backtracks), UNAIDED (no hint/solution), SWIFT (under par), BLAZING
+  (under ½ par; par = `cells*1.7`). Shown as chips in the collapse/share overlay.
+- **Streak + freezes** (`DailyService`) — `markSolvedAndGetStreak` returns
+  `(streak, freezes, freezeUsed, freezeEarned)`; earn 1 freeze / 7 days (cap 2),
+  auto-spent to bridge a missed day. Tracks max streak.
+- **`StreakScreen`** (home ✨ icon) — current-week strip, freeze tokens, stat strip,
+  and the astrophysics **milestone ladder** (3 Photon … 1000 Big Bang).
+
+**HINT button (`_showHintSteps`).** Reveals the next ~3 correct cells (from the longest
+path-vs-`grid.solution` prefix) as pulsing markers; auto-clears after 4s; forfeits
+UNAIDED and costs entropy in Entropy mode. **Premium hook:** gate hint count later.
+Distinct from the full **SOLUTION** reveal (`_toggleSolution`).
 
 **Portrait only.** Locked in `main.dart`. Do not add landscape.
 
@@ -376,20 +421,26 @@ escape/boss mode (not a normal-puzzle addon).
 
 ---
 
-## Planned next features (priority order)
+## Current state & next steps  →  see `ROADMAP.md` and `DESCENT.md`
 
-1. **Retention / meta-progression** — par times + medals per daily (Bronze = solve,
-   Silver = under par, Gold = no backtracks); star-map (each daily solve lights a
-   star in a monthly constellation); streak-freeze token; weekly Constellation set.
-2. **Level progression** — proper home-screen level select/indicator; difficulty
-   ramp display; mechanic unlocks visible in the menu flow (not just the dev panel).
-3. **Entangled pair tuning** — playtest frequency and level placement; decide
-   whether it mixes into normal progression or stays as a sparse boss-level mechanic.
-4. **Boss / escape mode** — hunter revisited as a dedicated escape-style level
-   (separate from normal puzzle flow, where fill-every-cell doesn't apply).
-5. **Audio follow-ups** (optional) — produced sample for collapse stinger; per-mode
-   ambient intensity; settings screen with volume + SFX/music sliders.
-6. **Android signing** — ✅ DONE. Keystore at `android/collapse-release.jks`
+**`ROADMAP.md` is the source of truth** for what's done (✅/◐/☐) and next. Snapshot
+as of this writing:
+
+- **Done:** all puzzle mechanics; Penrose skin; Quantum mode; app icon; **Phase 2
+  retention** (badges, StreakScreen, freezes); **Entropy mode** (high-score survival
+  with the entropy meter + Easy/Medium/Hard, per the `DESCENT.md` design); the HINT
+  button.
+- **Active big track — Descent roguelike (`DESCENT.md`):** the entropy core (Phase A)
+  shipped *as* Entropy mode. **Next = Phase B**: the Descent run skeleton (run-state +
+  a linear act → final boss + a map screen), then branching DAG + relics + boss
+  mechanics (Heat Death / Big Crunch / Kerr Spin / Final Singularity).
+- **Also pending:** **on-device tuning** — Entropy balance (the `kEntropy*` / tick
+  constants), multiverse length/difficulty, entangled frequency; **Phase 3
+  monetization** (`PremiumService` gating the Quantum picker / Penrose theme / HINT
+  count — all hooks exist); **Phase 4** progression-menu / unlock surfacing; the
+  **name decision** (store title) and gating/removing the `· dev ·` menu before release.
+
+**Android signing** — ✅ DONE. Keystore at `android/collapse-release.jks`
    (git-ignored). GitHub secrets set: KEYSTORE_BASE64, KEY_STORE_PASSWORD,
    KEY_PASSWORD (`NT2FltZM5SGXKhaYKgYg`), KEY_ALIAS (`collapse`). CI builds
    release-signed APKs; `--build-number=${{ github.run_number }}` increments

@@ -1,11 +1,21 @@
 # Singularity — Roadmap
 
-The mechanic layer is largely **done** (core trace, wormholes, mass gates, gravity
-wells, entangled pair, multiverse, Penrose skin, Quantum mode). What remains is the
-**meta layer** (retention, monetization, progression), **branding/release prep**
-(app icon, name), and a **tuning/housekeeping** pass. Sequenced below by leverage.
+The mechanic layer is **done** (core trace, wormholes, mass gates, gravity wells,
+entangled pair, multiverse, Penrose skin, Quantum mode). The **retention layer**
+(Phase 2: badges, streak screen, freezes) and the **app icon** are done. The
+**stakes layer** has begun: **Entropy mode** (high-score survival) shipped as Phase A
+of the **Descent roguelike** — see `DESCENT.md`, now the marquee track.
+
+What remains: the **Descent roguelike** (Phase B+), **monetization**, **progression
+menu**, **on-device tuning**, and the store-**name** decision.
 
 Status legend: ☐ todo · ◐ partial · ✅ done
+
+> **Marquee track — Descent roguelike (`DESCENT.md`).** A finite-act, branching
+> entropy roguelike toward a final boss. **Phase A (the entropy core) is done** — it
+> shipped as **Entropy mode** (was Infinity): a run-wide entropy meter, Easy/Medium/
+> Hard, HEAT-DEATH fail, per-difficulty high score. **Next: Phase B** = run-state +
+> a linear act → final boss + map screen; then DAG/relics, then boss mechanics.
 
 ---
 
@@ -84,10 +94,10 @@ The engagement engine. Builds on the existing `DailyService` (streak, daily seed
 - ✅ **Streak-freeze token** — earn 1 every 7 consecutive days (cap 2); auto-consumed
   to bridge a missed day so the streak survives. `DailyService.markSolvedAndGetStreak`
   returns `(streak, freezes, freezeUsed, freezeEarned)`; surfaced in the collapse
-  overlay ("STREAK SAVED · FREEZE USED" / "FREEZE EARNED") and the star-map (❄ tokens).
+  overlay ("STREAK SAVED · FREEZE USED" / "FREEZE EARNED") and the streak screen (❄ tokens).
   Four unit tests cover the streak/freeze logic.
 - ☐ **Weekly Constellation set** — a 7-day themed run.
-- ☐ **Month navigation** on the star-map (currently current-month only).
+- ☐ **Month navigation** / a monthly calendar view (the streak screen is week-based).
 
 **Effort:** medium–large (new screens + a progress service). **Dependencies:** none
 hard; medals feed the share card and the star-map.
@@ -105,6 +115,8 @@ The surfaces now exist; this wires the paywall.
     picker + timed toggle (the "tailor your session" pitch). *Already designed.*
   - **Penrose / future board themes** — cosmetic unlock (the `ThemeService` hook
     is already in place for this).
+  - **Hint allowance** — the `HINT` button exists (next-few-steps reveal); free =
+    N/day, premium = unlimited. Gate `_showHintSteps` behind a counter.
   - Optional: ad-free, extra daily replays, constellation packs.
 - ☐ **Store/IAP plumbing** — `in_app_purchase`, product IDs, restore-purchases.
 
@@ -141,12 +153,14 @@ invisible in the main flow.
 
 ---
 
-## Suggested order
+## Suggested order (updated)
 
-**0 (tuning/housekeeping) → 1 (icon + name) → 2 (retention) → 3 (monetization) →
-4 (progression menu) → 5 (optional).**
+Done so far: **Phase 0 (partial)**, **Phase 1 icon**, **Phase 2 retention**, and
+**Descent Phase A** (Entropy mode).
 
-Rationale: Phase 0 is cheap polish; Phase 1 is release-prerequisite branding;
-Phase 2 is the single biggest driver of whether players come back; Phase 3 monetizes
-the now-rich feature set; Phase 4 makes the whole progression legible; Phase 5 is
-upside.
+**Next:** **Descent Phase B** (roguelike skeleton — the marquee track) **and/or** an
+**on-device tuning pass** (Entropy balance, multiverse length, entangled frequency —
+all `// TUNE`). Then **Phase 3 monetization** (hooks all exist: Quantum picker,
+Penrose theme, HINT allowance), **Phase 4** progression menu, the **name** decision,
+and **Phase 5** extras. Tuning is cheap and unblocks honest balancing; Descent is the
+biggest session-length/retention lever.
