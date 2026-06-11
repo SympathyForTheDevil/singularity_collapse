@@ -149,8 +149,15 @@ through a global Freeverb send for a cosmic space:
   Pitches verified against public-domain sources — Mutopia LilyPond (relative-octave
   parsed, or converted to MIDI deterministically via a throwaway Dart tool for the
   dense Menuet), and a public-domain MIDI parsed to its top line (Sugar Plum). No
-  hand-transcription. **Planned:** Debussy Clair de Lune (rubato — doesn't reduce
-  cleanly to a beat grid). On-theme nod: GB Tetris "Music B" was a
+  hand-transcription. **Toccata · Techno** — Bach's BWV 565 opening flourish (MIDI-
+  verified) reimagined as **techno**: this is why `_Note` carries an `_Instr` voice
+  (celesta · bass · lead · sub · kick · hat · clap), not just a `bass` bool. The
+  classical voices go through `_addVoice`; the electronic ones have dedicated
+  synthesis (`_addLead` detuned-saw, `_addSub` punchy sub, `_addKick` pitch-drop +
+  click, `_addHat`/`_addClap` noise) — a four-on-the-floor groove under the Bach
+  lead, the global reverb giving it a dub-techno space. To add a *genre* track,
+  reuse those `_Instr` voices in a builder. **Planned:** Debussy Clair de Lune
+  (rubato — doesn't reduce cleanly to a beat grid). On-theme nod: GB Tetris "Music B" was a
   chiptune Bach minuet. Chosen via the **Settings screen** (`settings_screen.dart`,
   ⚙ tune icon on Home).
 

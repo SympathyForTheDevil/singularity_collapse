@@ -23,6 +23,7 @@ const List<MusicTrack> kMusicTracks = [
   MusicTrack('korobeiniki', 'Korobeiniki', 'Russian folk'),
   MusicTrack('bach_menuet', 'Menuet, BWV 814', 'J.S. Bach'),
   MusicTrack('sugar_plum', 'Sugar Plum Fairy', 'P. Tchaikovsky'),
+  MusicTrack('toccata_techno', 'Toccata · Techno', 'Bach (remix)'),
 ];
 
 /// All game audio. Hybrid design:
@@ -590,6 +591,8 @@ class AudioService with WidgetsBindingObserver {
         return _bachMenuet();
       case 'sugar_plum':
         return _sugarPlum();
+      case 'toccata_techno':
+        return _toccataTechno();
       default:
         return null;
     }
@@ -604,11 +607,24 @@ class AudioService with WidgetsBindingObserver {
     final out = _alloc(p.loopBeats * spb);
     for (final n in p.notes) {
       if (n.midi < 0) continue;                   // rest
-      final freq  = 440.0 * pow(2, (n.midi - 69) / 12.0).toDouble();
       final start = (n.start * spb * _sr).round();
-      _addVoice(out, start, freq, bass: n.bass, vel: n.vel,
-        decay: n.bass ? p.bassDecay : p.melodyDecay,
-        ring:  n.bass ? p.bassRing  : p.melodyRing);
+      final instr = n.instr;
+      if (instr == _Instr.celesta || instr == _Instr.bass) {
+        final isBass = instr == _Instr.bass;
+        _addVoice(out, start, _freq(n.midi), bass: isBass, vel: n.vel,
+          decay: isBass ? p.bassDecay : p.melodyDecay,
+          ring:  isBass ? p.bassRing  : p.melodyRing);
+      } else if (instr == _Instr.lead) {
+        _addLead(out, start, _freq(n.midi), n.vel);
+      } else if (instr == _Instr.sub) {
+        _addSub(out, start, _freq(n.midi), n.vel);
+      } else if (instr == _Instr.kick) {
+        _addKick(out, start, n.vel);
+      } else if (instr == _Instr.hat) {
+        _addHat(out, start, n.vel);
+      } else {                                    // clap
+        _addClap(out, start, n.vel);
+      }
     }
     return out;
   }
@@ -638,6 +654,96 @@ class AudioService with WidgetsBindingObserver {
     }
   }
 
+  /// Equal-tempered frequency for a MIDI note.
+  double _freq(int midi) => 440.0 * pow(2, (midi - 69) / 12.0).toDouble();
+
+  // ── Electronic voices (the techno track) ─────────────────────────────────────
+  /// Buzzy detuned-sawtooth synth lead — band-limited, plucky decay.
+  void _addLead(Float64List out, int startSample, double freq, double vel) {
+    final n = out.length;
+    if (n == 0) return;
+    final len = (0.55 * _sr).round();
+    final atk = 0.004 * _sr;
+    final amp = 0.05 * vel;
+    for (var k = 0; k < len; k++) {
+      final t = k / _sr;
+      final env = (k < atk ? k / atk : 1.0) * exp(-t * 5.5);
+      var s = 0.0;
+      for (var h = 1; h <= 6; h++) {            // band-limited saw + detuned twin
+        s += sin(2 * pi * freq * h * t) / h;
+        s += sin(2 * pi * freq * 1.007 * h * t) / h * 0.4;
+      }
+      out[(startSample + k) % n] += s * env * amp;
+    }
+  }
+
+  /// Punchy synth sub-bass — sine + a little bite, fast pumping decay.
+  void _addSub(Float64List out, int startSample, double freq, double vel) {
+    final n = out.length;
+    if (n == 0) return;
+    final len = (0.34 * _sr).round();
+    final atk = 0.003 * _sr;
+    final amp = 0.20 * vel;
+    for (var k = 0; k < len; k++) {
+      final t = k / _sr;
+      final env = (k < atk ? k / atk : 1.0) * exp(-t * 7.0);
+      final s = sin(2 * pi * freq * t)
+              + 0.25 * sin(2 * pi * freq * 2 * t)
+              + 0.10 * sin(2 * pi * freq * 3 * t);
+      out[(startSample + k) % n] += s * env * amp;
+    }
+  }
+
+  /// Four-on-the-floor kick — a pitch-dropping sine thump + a click transient.
+  void _addKick(Float64List out, int startSample, double vel) {
+    final n = out.length;
+    if (n == 0) return;
+    final len = (0.30 * _sr).round();
+    final amp = 0.5 * vel;
+    final rnd = Random(startSample);
+    var phase = 0.0;
+    for (var k = 0; k < len; k++) {
+      final t = k / _sr;
+      final f = 48 + 110 * exp(-t * 36);        // 158 → 48 Hz pitch drop
+      phase += 2 * pi * f / _sr;
+      var s = sin(phase) * exp(-t * 8.5);       // body
+      if (t < 0.005) {                          // click transient
+        s += (rnd.nextDouble() * 2 - 1) * (1 - t / 0.005) * 0.5;
+      }
+      out[(startSample + k) % n] += s * amp;
+    }
+  }
+
+  /// Closed hi-hat — a very short white-noise tick.
+  void _addHat(Float64List out, int startSample, double vel) {
+    final n = out.length;
+    if (n == 0) return;
+    final len = (0.06 * _sr).round();
+    final amp = 0.09 * vel;
+    final rnd = Random(startSample ^ 0x33);
+    for (var k = 0; k < len; k++) {
+      final env = exp(-(k / _sr) * 130);
+      out[(startSample + k) % n] += (rnd.nextDouble() * 2 - 1) * env * amp;
+    }
+  }
+
+  /// Clap/snare on the backbeat — a few quick noise bursts then a short tail.
+  void _addClap(Float64List out, int startSample, double vel) {
+    final n = out.length;
+    if (n == 0) return;
+    final len = (0.20 * _sr).round();
+    final amp = 0.15 * vel;
+    final rnd = Random(startSample ^ 0x5A);
+    for (var k = 0; k < len; k++) {
+      final t = k / _sr;
+      final double e = t < 0.018 ? 1.0
+          : t < 0.030 ? 0.5
+          : t < 0.046 ? 0.8
+          : exp(-(t - 0.046) * 38);
+      out[(startSample + k) % n] += (rnd.nextDouble() * 2 - 1) * e * amp;
+    }
+  }
+
   /// Bach — Prelude in C, BWV 846, measures 1–4 (I → ii⁷ → V⁷ → I), the iconic
   /// broken-chord figure. Each bar = two lower notes + a three-note arpeggio,
   /// the 8-note group played twice (16 sixteenths). Loops on the C→C cadence.
@@ -654,7 +760,7 @@ class AudioService with WidgetsBindingObserver {
                      0, 1, 2, 3, 4, 2, 3, 4];               // 16 × 1/16
     final notes = <_Note>[];
     for (var b = 0; b < bars.length; b++) {
-      notes.add(_Note(bass[b], (b * 4).toDouble(), vel: 0.9, bass: true));
+      notes.add(_Note(bass[b], (b * 4).toDouble(), vel: 0.9, instr: _Instr.bass));
       for (var i = 0; i < pattern.length; i++) {
         notes.add(_Note(bars[b][pattern[i]], b * 4 + i * 0.25,
             vel: i % 8 == 0 ? 0.55 : 0.4));
@@ -676,7 +782,7 @@ class AudioService with WidgetsBindingObserver {
     for (var bar = 0; bar < 4; bar++) {           // vamp: G | D | G | D
       final isG  = bar.isEven;
       final base = bar * 3.0;                     // 3 beats per bar
-      notes.add(_Note(isG ? gBass : dBass, base, vel: 0.85, bass: true));
+      notes.add(_Note(isG ? gBass : dBass, base, vel: 0.85, instr: _Instr.bass));
       for (final c in (isG ? gChord : dChord)) {
         notes.add(_Note(c, base + 1, vel: 0.30)); // beat 2
         notes.add(_Note(c, base + 2, vel: 0.28)); // beat 3
@@ -704,7 +810,8 @@ class AudioService with WidgetsBindingObserver {
   _MusicPiece _chopinPreludeInA() {
     final notes = <_Note>[];
     void n(int midi, double beat, double vel, {bool bass = false}) =>
-        notes.add(_Note(midi, beat, vel: vel, bass: bass));
+        notes.add(_Note(midi, beat, vel: vel,
+            instr: bass ? _Instr.bass : _Instr.celesta));
 
     // Melody (top voice).  C#5 D5 | B4 B4 B4 | F#5 | D#5 E5 A5 A5 A5 | E4 (upbeat)
     const mv = 0.6;
@@ -820,6 +927,52 @@ class AudioService with WidgetsBindingObserver {
     return _MusicPiece(104, 16, notes);             // 8 bars of 2/4
   }
 
+  /// Bach — Toccata and Fugue in D minor, BWV 565, reimagined as **techno**. The
+  /// iconic opening flourish (A → G F E D C# → D, verified from a public-domain
+  /// MIDI) sequenced down an octave then capped by the diminished-7th stab, over a
+  /// four-on-the-floor kick, offbeat hats, backbeat claps and a rolling D-minor
+  /// sub-bass. The global cosmic reverb lends it a dub-techno space. 128 BPM,
+  /// 16-beat (4-bar) loop.
+  _MusicPiece _toccataTechno() {
+    final notes = <_Note>[];
+    void lead(int m, double b, [double v = 0.6]) =>
+        notes.add(_Note(m, b, vel: v, instr: _Instr.lead));
+    void sub(int m, double b) => notes.add(_Note(m, b, vel: 0.9, instr: _Instr.sub));
+    void kick(double b) => notes.add(_Note(0, b, instr: _Instr.kick));
+    void hat(double b) => notes.add(_Note(0, b, vel: 0.7, instr: _Instr.hat));
+    void clap(double b) => notes.add(_Note(0, b, vel: 0.9, instr: _Instr.clap));
+
+    // Drums: kick on every beat, hat on every offbeat, clap on the backbeat.
+    for (var beat = 0; beat < 16; beat++) {
+      kick(beat.toDouble());
+      hat(beat + 0.5);
+    }
+    for (var beat = 1; beat < 16; beat += 2) {
+      clap(beat.toDouble());
+    }
+    // Rolling sub-bass on the offbeats (interlocks with the kick); a D-minor pedal
+    // walking down through the turnaround bar.
+    const subline = [38, 38, 38, 38, 38, 38, 38, 38,
+                     37, 37, 38, 38, 38, 36, 34, 33];
+    for (var i = 0; i < 16; i++) {
+      sub(subline[i], i + 0.5);
+    }
+    // Lead — the BWV 565 opening, quantized to the grid.
+    lead(81, 0.0, 0.7);                                             // A5
+    lead(79, 1.0); lead(77, 1.25); lead(76, 1.5); lead(74, 1.75); lead(73, 2.0);
+    lead(74, 2.5, 0.7);                                             // → D5
+    lead(69, 4.0, 0.7);                                             // A4 (8ve down)
+    lead(67, 5.0); lead(65, 5.25); lead(64, 5.5); lead(62, 5.75); lead(61, 6.0);
+    lead(62, 6.5, 0.7);                                             // → D4
+    for (final m in [52, 55, 58, 61, 64]) {                        // dim-7th stab
+      lead(m, 8.0, 0.35);
+    }
+    lead(81, 10.0, 0.6); lead(79, 10.5); lead(77, 11.0);           // high answer
+    lead(74, 12.0, 0.6); lead(73, 12.5); lead(74, 13.0, 0.6);      // settle to D
+    lead(69, 14.0, 0.5); lead(62, 15.0, 0.5);                      // A, D
+    return _MusicPiece(128, 16, notes);                            // 4 bars of 4/4
+  }
+
   /// 16-bit mono PCM WAV wrapper around float samples in [-1, 1].
   Uint8List _wav(Float64List mono) {
     final n  = mono.length;
@@ -850,14 +1003,18 @@ class AudioService with WidgetsBindingObserver {
   }
 }
 
-/// One note in a [_MusicPiece]: a MIDI pitch (<0 = rest) struck at [start] beats,
-/// with velocity [vel]; [bass] selects the softer, longer-ringing bass voice.
+/// Instrument voice for a [_Note]: the classical tracks use celesta/bass; the
+/// techno track adds the synth lead + sub-bass and the drum hits.
+enum _Instr { celesta, bass, lead, sub, kick, hat, clap }
+
+/// One note (or drum hit) in a [_MusicPiece]: a MIDI pitch (<0 = rest; ignored by
+/// the drum voices) struck at [start] beats, with velocity [vel] on voice [instr].
 class _Note {
   final int midi;
   final double start;   // beats from loop start
   final double vel;     // 0..1
-  final bool bass;
-  const _Note(this.midi, this.start, {this.vel = 1.0, this.bass = false});
+  final _Instr instr;
+  const _Note(this.midi, this.start, {this.vel = 1.0, this.instr = _Instr.celesta});
 }
 
 /// A loopable musical phrase: [bpm], total [loopBeats] (the loop length), the
