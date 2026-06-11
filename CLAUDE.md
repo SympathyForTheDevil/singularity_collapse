@@ -168,13 +168,19 @@ so a filter hiccup never costs the dry audio.
 
 **Tutorial & Field Guide (`lib/field_guide.dart`).** First-encounter teaching:
 the first time the player meets the Core, a Wormhole, a Mass Gate, a Gravity Well,
-or an Entangled Pair, `PuzzleScreen` shows a one-time modal card
-(`_buildTutorialCard`, queued in `_cards`) over the dimmed board; "GOT IT"
-dismisses and marks it seen. State is persisted via `GuideService`
-(`seen_core/_wormhole/_gate/_well/_entangled`) — the same flags drive the **Field
+an Entangled Pair, or a Multiverse — **and on the first Entropy board** (a mode
+explainer: `seen_entropy`, predicate `_isEntropy`, shown right after the timeline
+card) — `PuzzleScreen` shows a one-time modal card (`_buildTutorialCard`, queued in
+`_cards`) over the dimmed board; "GOT IT" dismisses and marks it seen. State is
+persisted via `GuideService` (`seen_core/_wormhole/_gate/_well/_entangled/
+_multiverse/_entropy`) — the mechanic flags drive the **Field
 Guide** (`FieldGuideScreen`, book icon top-left on Home): every concept/object is
 listed, but un-encountered entries are blacked out showing "UNLOCKS AT LEVEL X"
-(the mechanic's skill-gate level). To add a mechanic: append to `kGuideEntries`
+(the mechanic's skill-gate level; `seen_entropy` is card-only, not a guide entry).
+**Onboarding gate:** Daily & Syntropy are **locked on Home** ("PLAY ENTROPY FIRST")
+until `seen_core && seen_entropy` — i.e. the player has played Entropy once and
+dismissed the timeline + entropy cards (`_onboarded` in `home_screen`). To add a
+mechanic: append to `kGuideEntries`
 (+ `kTutorialCards` if it deserves a card) and add a motif to `_GuideIconPainter`.
 The old transient "NEW · …" hint intros were replaced by these cards; `_showHint`
 is now only for in-context nudges (blocked moves).

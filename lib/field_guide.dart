@@ -19,7 +19,7 @@ class GuideEntry {
 class GuideService {
   static const keys = [
     'seen_core', 'seen_wormhole', 'seen_gate', 'seen_well', 'seen_entangled',
-    'seen_multiverse',
+    'seen_multiverse', 'seen_entropy',
   ];
 
   static Future<Set<String>> seen() async {
@@ -91,6 +91,12 @@ const List<GuideEntry> kTutorialCards = [
     'Drag one continuous line. Consume cosmic objects in ascending mass order, '
     'fill every cell, and finish on the Black Hole to collapse the region.',
     'seen_core', 1),
+  GuideEntry('entropy', 'ENTROPY MODE',
+    'A survival run for high score. The ENTROPY bar climbs with time — and with '
+    'every backtrack, hint or peek. Solve a region to VENT it (clean + fast vents '
+    'most). Let the bar fill and the region suffers HEAT DEATH and the run ends. '
+    'Go deep; reach Lv 16 to unlock the next difficulty.',
+    'seen_entropy', 1),
   GuideEntry('wormhole', 'WORMHOLE',
     'Two linked portals. Enter one and your line emerges from its twin — you '
     'can\'t walk through a portal without taking the jump.',
@@ -164,6 +170,22 @@ class _GuideIconPainter extends CustomPainter {
         canvas.drawCircle(c, u * 0.2, Paint()..color = Colors.black);
         canvas.drawCircle(c, u * 0.2, Paint()
           ..color = _purple ..style = PaintingStyle.stroke ..strokeWidth = 2.5);
+      case 'entropy':
+        // A rising meter (track + red fill) under an upward arrow.
+        final track = RRect.fromRectAndRadius(
+          Rect.fromLTWH(u * 0.16, u * 0.46, u * 0.68, u * 0.16),
+          Radius.circular(u * 0.08));
+        canvas.drawRRect(track, Paint()..color = const Color(0xff1c2e3c));
+        final fill = RRect.fromRectAndRadius(
+          Rect.fromLTWH(u * 0.16, u * 0.46, u * 0.68 * 0.7, u * 0.16),
+          Radius.circular(u * 0.08));
+        canvas.drawRRect(fill, Paint()..color = const Color(0xffff4466));
+        final arrow = Path()
+          ..moveTo(u * 0.5, u * 0.16)
+          ..lineTo(u * 0.63, u * 0.38)
+          ..lineTo(u * 0.37, u * 0.38)
+          ..close();
+        canvas.drawPath(arrow, Paint()..color = _gold);
       case 'wormhole':
         for (final dx in [-u * 0.2, u * 0.2]) {
           canvas.drawCircle(c + Offset(dx, 0), u * 0.16, Paint()

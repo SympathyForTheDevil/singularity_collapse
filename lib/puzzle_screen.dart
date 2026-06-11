@@ -282,6 +282,7 @@ class _PuzzleScreenState extends State<PuzzleScreen>
       'seen_well'     => grid.wells.isNotEmpty,
       'seen_entangled'=> grid.hasQuantum,
       'seen_multiverse'=> grid.hasMultiverse,
+      'seen_entropy'  => _isEntropy,                 // mode explainer, any board
       _               => false,
     };
     for (final card in kTutorialCards) {

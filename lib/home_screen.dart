@@ -28,6 +28,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   RunDifficulty _entropyDiff = RunDifficulty.medium;
   Map<RunDifficulty, int> _entropyBest = const {};
   Map<RunDifficulty, int> _maxLevel    = const {};
+  bool _onboarded = false;   // played Entropy + seen the timeline/entropy cards
   static const int _kUnlockLevel = 16;   // reach this on a tier to unlock the next
 
   late final AnimationController _pulse;
@@ -65,6 +66,11 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       for (final d in RunDifficulty.values)
         d: await ProgressService.bestLevel(d.name),
     };
+    // Daily & Syntropy stay locked until the player has played Entropy once and
+    // dismissed the timeline + entropy tutorial cards.
+    final seen = await GuideService.seen();
+    final onboarded =
+        seen.contains('seen_core') && seen.contains('seen_entropy');
     bool unlocked(RunDifficulty d) => switch (d) {
       RunDifficulty.easy   => true,
       RunDifficulty.medium => (maxLvl[RunDifficulty.easy]   ?? 0) >= _kUnlockLevel,
@@ -75,7 +81,8 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         _solvedToday = solved; _streak = streak;
         // Fall back to Easy if the remembered difficulty is still locked.
         _entropyDiff = unlocked(diff) ? diff : RunDifficulty.easy;
-        _entropyBest = best; _maxLevel = maxLvl; _loaded = true;
+        _entropyBest = best; _maxLevel = maxLvl; _onboarded = onboarded;
+        _loaded = true;
       });
     }
   }
@@ -324,12 +331,13 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                     ),
                     const SizedBox(height: 16),
 
-                    // Daily button
+                    // Daily button (locked until the player has played Entropy)
                     _menuBtn(
                       _solvedToday ? 'ALREADY COLLAPSED' : 'TODAY\'S REGION',
-                      subtitle: today,
-                      color: _solvedToday ? const Color(0xff334455) : _gold,
-                      onTap: _solvedToday ? null : _goDaily,
+                      subtitle: _onboarded ? today : 'PLAY ENTROPY FIRST',
+                      color: (_onboarded && !_solvedToday)
+                        ? _gold : const Color(0xff334455),
+                      onTap: (_onboarded && !_solvedToday) ? _goDaily : null,
                     ),
                     const SizedBox(height: 14),
 
@@ -375,11 +383,11 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                     }),
                     const SizedBox(height: 14),
 
-                    // Syntropy button (tailor-your-session: pick types + timed)
+                    // Syntropy button (locked until the player has played Entropy)
                     _menuBtn('SYNTROPY',
-                      subtitle: 'TAILOR YOUR SESSION',
+                      subtitle: _onboarded ? 'TAILOR YOUR SESSION' : 'PLAY ENTROPY FIRST',
                       color: _purple,
-                      onTap: _goQuantum),
+                      onTap: _onboarded ? _goQuantum : null),
                   ],
                 ),
               ),
