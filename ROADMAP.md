@@ -135,11 +135,14 @@ are the obvious value props (they are).
 Right now mechanic unlocks (`seen_*` flags → Field Guide → Syntropy picker) are
 invisible in the main flow.
 
-- ☐ **Home-screen progression** — current stage, next unlock teaser ("Wormholes at
-  L4"), solved count.
-- ☐ **Unlock celebration** — a small "NEW MECHANIC UNLOCKED" beat the first time a
-  mechanic graduates into play (ties into the existing tutorial-card system).
+- ✅ **Home-screen progression strip** — the five mechanics as lit/dim icons + a
+  "MECHANICS N/5 · NEXT · <name> · L<gate>" teaser, on the home screen above the
+  footer; taps through to the Field Guide. Surfaces the unlock loop in the main flow.
+- ✅ **Unlock celebration** — the first-encounter tutorial card now shows a
+  "✦ NEW MECHANIC UNLOCKED ✦" banner (gold, glowing) for mechanic cards, with an
+  unlock chime + haptic when a mechanic is first discovered.
 - ☐ **Level-select / chapter view** (optional) — if infinity should become chaptered.
+- ☐ Optional polish: a "deepest stage / solved count" stat on the strip.
 
 **Effort:** medium. **Why later:** it dresses the systems Phases 2–3 establish.
 

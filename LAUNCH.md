@@ -42,16 +42,22 @@ Legend: ☐ todo · ◐ in progress · ✅ done
   Recommend launching *without* (the app stores only local prefs → minimal data) and
   adding Crashlytics/Sentry in a later update if wanted.
 
-### B. Monetization (Phase 3) — needs a model decision first (see chat)
+### B. Monetization (Phase 3) — model chosen: **Free + rewarded ads + IAP**
 - ☐ **`PremiumService`** — persisted entitlement flag (dev toggle now; store purchase
-  later). Restore-purchases support.
-- ☐ **Gate the premium surfaces** (hooks already exist): Syntropy full picker,
-  Penrose theme, HINT allowance. Free tier still fully playable.
-- ☐ **`in_app_purchase` plumbing** — one product ID across both stores; buy + restore;
-  sandbox/license testing.
-- ☐ **Store-side IAP setup** — create the product in App Store Connect (non-consumable)
-  and Play Console (one-time product); accept **Paid Apps agreement** + **tax/banking**
-  on both (required before you can sell anything).
+  later). Restore-purchases support. Premium = removes ads + unlocks Syntropy full
+  picker / Penrose theme / unlimited hints.
+- ☐ **Rewarded ads** via **`google_mobile_ads`** (AdMob): e.g. watch an ad to earn a
+  hint or an extra daily replay. Free tier stays fully playable without ever watching.
+- ☐ **`in_app_purchase` plumbing** — a "Premium / Remove Ads" product across both
+  stores; buy + restore; sandbox/license testing.
+- ☐ **Store-side setup** — IAP product in App Store Connect + Play Console; accept
+  **Paid Apps agreement** + **tax/banking**; create an **AdMob account**, register the
+  app, get ad-unit IDs, link AdMob ↔ Play/App Store Connect.
+- ⚠ **Ads change the privacy story** (vs an IAP-only build): the ads SDK collects
+  device/advertising identifiers. This requires: an updated **privacy policy**, fuller
+  **Google Data safety** + **Apple privacy** disclosures, the iOS **App Tracking
+  Transparency** prompt (`NSUserTrackingUsageDescription` + ATT flow) if ads
+  personalize, and the **Google UMP / consent** flow for GDPR regions. Budget for this.
 
 ### C. Progression menu (Phase 4)
 - ☐ Home-screen progression: current stage / solved count / next-unlock teaser

@@ -307,12 +307,19 @@ class _PuzzleScreenState extends State<PuzzleScreen>
       'seen_syntropy' => _isQuantum,                 // first time in Syntropy mode
       _               => false,
     };
+    const mechIds = {'wormhole', 'gate', 'well', 'entangled', 'multiverse'};
+    var unlockedMechanic = false;
     for (final card in kTutorialCards) {
       if (onBoard(card.seenKey) &&
           !_seenKeys.contains(card.seenKey) &&
           !_cards.contains(card)) {
         _cards.add(card);
+        if (mechIds.contains(card.id)) unlockedMechanic = true;
       }
+    }
+    if (unlockedMechanic) {            // celebrate a first-time mechanic discovery
+      AudioService.instance.unlock();
+      HapticFeedback.mediumImpact();
     }
     if (_cards.isNotEmpty) setState(() {});
   }
@@ -1193,10 +1200,20 @@ class _PuzzleScreenState extends State<PuzzleScreen>
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Text('NEW',
-                style: TextStyle(
-                  color: Color(0xff6688aa), fontSize: 10, fontFamily: 'monospace',
-                  letterSpacing: 4)),
+              Builder(builder: (_) {
+                const mechIds = {'wormhole', 'gate', 'well', 'entangled', 'multiverse'};
+                final isMech = mechIds.contains(e.id);
+                return Text(isMech ? '✦  NEW MECHANIC UNLOCKED  ✦' : 'NEW',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: isMech ? _accent : const Color(0xff6688aa),
+                    fontSize: isMech ? 11 : 10, fontFamily: 'monospace',
+                    fontWeight: isMech ? FontWeight.bold : FontWeight.normal,
+                    letterSpacing: isMech ? 2 : 4,
+                    shadows: isMech
+                      ? const [Shadow(color: Color(0x66ffc24d), blurRadius: 10)]
+                      : null));
+              }),
               const SizedBox(height: 14),
               GuideIcon(e.id, size: 64),
               const SizedBox(height: 14),

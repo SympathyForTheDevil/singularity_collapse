@@ -29,6 +29,16 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   Map<RunDifficulty, int> _entropyBest = const {};
   Map<RunDifficulty, int> _maxLevel    = const {};
   bool _onboarded = false;   // played Entropy + seen the worldline/entropy cards
+  Set<String> _seen = const {};   // encountered-mechanic flags (for progression)
+
+  /// The five mechanics in unlock order: (seenKey, label, iconId, gate level).
+  static const List<(String, String, String, int)> _kMechanics = [
+    ('seen_wormhole',  'WORMHOLE',     'wormhole',   kWormholeLevel),
+    ('seen_gate',      'MASS GATE',    'gate',       kMassGateLevel),
+    ('seen_well',      'GRAVITY WELL', 'well',       kGravityWellLevel),
+    ('seen_entangled', 'ENTANGLED',    'entangled',  kEntangledLevel),
+    ('seen_multiverse','MULTIVERSE',   'multiverse', kMultiverseLevel),
+  ];
   static const int _kUnlockLevel = 16;   // reach this on a tier to unlock the next
 
   late final AnimationController _pulse;
@@ -82,7 +92,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         // Fall back to Easy if the remembered difficulty is still locked.
         _entropyDiff = unlocked(diff) ? diff : RunDifficulty.easy;
         _entropyBest = best; _maxLevel = maxLvl; _onboarded = onboarded;
-        _loaded = true;
+        _seen = seen; _loaded = true;
       });
     }
   }
@@ -393,6 +403,12 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
               ),
             ),
 
+            // ── Progression: mechanics discovered (taps → Field Guide) ──────
+            if (_loaded) ...[
+              _progressionStrip(),
+              const SizedBox(height: 12),
+            ],
+
             // ── Footer ──────────────────────────────────────────────────────
             const Text(
               'drag one path · consume objects in order · fill every cell',
@@ -544,6 +560,53 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                      : sel ? c : const Color(0xff5a7488),
                 fontSize: 10, fontFamily: 'monospace',
                 fontWeight: FontWeight.bold, letterSpacing: 2)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Compact progression strip — the five mechanics as lit/dim icons + a count and
+  /// a next-unlock teaser. Surfaces the unlock loop in the main flow; taps to the
+  /// Field Guide for the full listing.
+  Widget _progressionStrip() {
+    final discovered = _kMechanics.where((m) => _seen.contains(m.$1)).length;
+    final remaining  = _kMechanics.where((m) => !_seen.contains(m.$1)).toList();
+    final teaser = remaining.isEmpty
+        ? 'ALL DISCOVERED'
+        : 'NEXT · ${remaining.first.$2} · L${remaining.first.$4}';
+    return GestureDetector(
+      onTap: () {
+        AudioService.instance.ui();
+        Navigator.push(context, MaterialPageRoute(
+          builder: (_) => const FieldGuideScreen()));
+      },
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 36),
+        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
+        decoration: BoxDecoration(
+          color: const Color(0xff0a1018),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: const Color(0xff223344), width: 1),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                for (final m in _kMechanics)
+                  Opacity(
+                    opacity: _seen.contains(m.$1) ? 1.0 : 0.24,
+                    child: GuideIcon(m.$3, size: 26)),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text('MECHANICS  $discovered / ${_kMechanics.length}     ·     $teaser',
+              style: const TextStyle(
+                color: Color(0xff8aa6bc), fontSize: 10,
+                fontFamily: 'monospace', letterSpacing: 1.5,
+                fontWeight: FontWeight.bold)),
           ],
         ),
       ),
