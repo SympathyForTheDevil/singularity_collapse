@@ -6,16 +6,21 @@ entangled pair, multiverse, Penrose skin, Syntropy mode). The **retention layer*
 **stakes layer** has begun: **Entropy mode** (high-score survival) shipped as Phase A
 of the **Descent roguelike** — see `DESCENT.md`, now the marquee track.
 
-What remains: the **Descent roguelike** (Phase B+), **monetization**, **progression
-menu**, **on-device tuning**, and the store-**name** decision.
-
 Status legend: ☐ todo · ◐ partial · ✅ done
 
-> **Marquee track — Descent roguelike (`DESCENT.md`).** A finite-act, branching
-> entropy roguelike toward a final boss. **Phase A (the entropy core) is done** — it
-> shipped as **Entropy mode** (was Infinity): a run-wide entropy meter, Easy/Medium/
-> Hard, HEAT-DEATH fail, per-difficulty high score. **Next: Phase B** = run-state +
-> a linear act → final boss + map screen; then DAG/relics, then boss mechanics.
+> **🚀 Active track — LAUNCH (`LAUNCH.md`).** Decision (post-2026-06): ship v1 first.
+> The pre-launch focus is **pre-release polish + monetization (Phase 3) + progression
+> menu (Phase 4)**, then deploy to Google Play + the Apple App Store. See `LAUNCH.md`
+> for the full step-by-step store/accounts/website/Mac plan.
+
+> **Post-launch feature update — Descent roguelike (`DESCENT.md`), DEFERRED.** A
+> finite-act, branching entropy roguelike toward a final boss. Phase A (the entropy
+> core) already shipped as **Entropy mode**. Phase B+ (run-state + map screen → DAG/
+> relics → boss mechanics) is **parked until after launch** as a marquee content drop.
+
+What remains before launch: **monetization**, **progression menu**, **pre-release
+polish** (store name, dev-menu gating, readability, tuning), then the **store
+deployment** itself.
 
 ---
 
@@ -160,14 +165,23 @@ invisible in the main flow.
 
 ---
 
-## Suggested order (updated)
+## Suggested order (LAUNCH-focused)
 
-Done so far: **Phase 0 (partial)**, **Phase 1 icon**, **Phase 2 retention**, and
-**Descent Phase A** (Entropy mode).
+Done so far: **Phase 0 (partial)**, **Phase 1 icon**, **Phase 2 retention**,
+**Descent Phase A** (Entropy mode), **Phase 5 audio/Settings** (music system + ambient),
+plus this session's entropy tuning, onboarding gate, Syntropy rename, guided HINT, and
+the home readability pass.
 
-**Next:** **Descent Phase B** (roguelike skeleton — the marquee track) **and/or** an
-**on-device tuning pass** (Entropy balance, multiverse length, entangled frequency —
-all `// TUNE`). Then **Phase 3 monetization** (hooks all exist: Syntropy picker,
-Penrose theme, HINT allowance), **Phase 4** progression menu, the **name** decision,
-and **Phase 5** extras. Tuning is cheap and unblocks honest balancing; Descent is the
-biggest session-length/retention lever.
+**Now (pre-launch), per `LAUNCH.md`:**
+1. **Register Apple + Google developer accounts** immediately (long lead times — the
+   Google 14-day closed test + ID verification gate everything).
+2. **Monetization (Phase 3)** — `PremiumService` + IAP gating (Syntropy picker /
+   Penrose / HINT). *Needs a model decision first (one-time unlock vs other).*
+3. **Progression menu (Phase 4)** — home progression + unlock celebration.
+4. **Pre-release polish** — store-name decision, dev-menu gating, finish readability,
+   AAB build, on-device tuning confirmation.
+5. **Deploy** — store listings, privacy/support site, screenshots, closed test →
+   production (both stores).
+
+**Deferred to post-launch:** Descent Phase B+, plus Phase 2/5 extras (Constellation
+set, hunter boss mode, Penrose×multiverse, wide single boards, Clair de Lune track).
