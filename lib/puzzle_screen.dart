@@ -940,7 +940,7 @@ class _PuzzleScreenState extends State<PuzzleScreen>
                               fit: BoxFit.scaleDown,
                               child: Text(
                                 _isDaily ? 'DAILY  ·  $dateStr'
-                                  : _isQuantum ? 'QUANTUM  ·  STAGE $level'
+                                  : _isQuantum ? 'SYNTROPY  ·  STAGE $level'
                                   : 'ENTROPY  ·  STAGE $level',
                                 style: const TextStyle(
                                   color: _accent, fontSize: 18,

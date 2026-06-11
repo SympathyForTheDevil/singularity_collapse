@@ -375,8 +375,9 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                     }),
                     const SizedBox(height: 14),
 
-                    // Quantum button (tailor-your-session: pick types + timed)
-                    _menuBtn('QUANTUM MODE',
+                    // Syntropy button (tailor-your-session: pick types + timed)
+                    _menuBtn('SYNTROPY',
+                      subtitle: 'TAILOR YOUR SESSION',
                       color: _purple,
                       onTap: _goQuantum),
                   ],

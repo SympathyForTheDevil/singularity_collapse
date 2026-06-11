@@ -129,7 +129,7 @@ class _QuantumSetupScreenState extends State<QuantumSetupScreen> {
                     ),
                   ),
                   const Expanded(
-                    child: Text('QUANTUM MODE',
+                    child: Text('SYNTROPY',
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         color: _purple, fontSize: 18, fontFamily: 'monospace',

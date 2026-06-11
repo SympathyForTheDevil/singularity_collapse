@@ -201,9 +201,13 @@ mute). Forward-looking: this is the hook an **unlockable perk** (via play or
 monetization, TBD) would gate — flip `ThemeService.setPenrose` from wherever the
 unlock lands.
 
-**Quantum Mode (`lib/quantum_setup.dart`, `lib/quantum_service.dart`).** The old Zen mode
-(`PuzzleMode.zen`) is now **Quantum Mode** (`PuzzleMode.quantum`) — a *tailor-your-session*
-mode. A setup screen (`QuantumSetupScreen`, reached from the home "QUANTUM MODE" button)
+**Syntropy mode (`lib/quantum_setup.dart`, `lib/quantum_service.dart`).** Displayed to
+players as **SYNTROPY** (the order-from-disorder counterpart to Entropy mode; renamed
+from "Quantum Mode" to avoid colliding with the *quantum*/entangled mechanic). The
+**display name only** changed — the enum value, files, service, and field names stay
+`quantum`/`PuzzleMode.quantum` to avoid churn (grep `SYNTROPY` for the player-facing
+strings). The old Zen mode (`PuzzleMode.zen`) became this *tailor-your-session*
+mode. A setup screen (`QuantumSetupScreen`, reached from the home "SYNTROPY" button)
 lets the player choose **which game types appear** (Normal + the five mechanics) and
 whether the run is **TIMED or RELAXED**. Only **unlocked** types are selectable — locked
 ones are greyed with "UNLOCK AT LEVEL X" (uses the same `GuideService` `seen_*` flags as
@@ -222,7 +226,8 @@ monetization lands (no gate yet).
   badges + drives the streak.
 - **Entropy** (was "Infinity"; `PuzzleMode.entropy`) — endless **high-score survival**.
   See below.
-- **Quantum** — the customizable safe haven (above); no stakes.
+- **Syntropy** (display name; internally `PuzzleMode.quantum`) — the customizable
+  safe haven (above); no stakes.
 
 **Entropy mode (high-score survival).** A run-wide **entropy meter** (`_entropy`, 0..1)
 is the fail state. It **rises** on a passive interval tick and on mistakes

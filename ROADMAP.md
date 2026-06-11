@@ -1,7 +1,7 @@
 # Singularity — Roadmap
 
 The mechanic layer is **done** (core trace, wormholes, mass gates, gravity wells,
-entangled pair, multiverse, Penrose skin, Quantum mode). The **retention layer**
+entangled pair, multiverse, Penrose skin, Syntropy mode). The **retention layer**
 (Phase 2: badges, streak screen, freezes) and the **app icon** are done. The
 **stakes layer** has begun: **Entropy mode** (high-score survival) shipped as Phase A
 of the **Descent roguelike** — see `DESCENT.md`, now the marquee track.
@@ -111,7 +111,7 @@ The surfaces now exist; this wires the paywall.
 - ☐ **`PremiumService`** — a persisted entitlement flag (dev toggle now, store
   purchase later via `in_app_purchase`).
 - ☐ **Premium gating, candidates:**
-  - **Quantum picker** — free = a basic/preset Quantum; premium = full mechanic
+  - **Syntropy picker** — free = a basic/preset Quantum; premium = full mechanic
     picker + timed toggle (the "tailor your session" pitch). *Already designed.*
   - **Penrose / future board themes** — cosmetic unlock (the `ThemeService` hook
     is already in place for this).
@@ -120,14 +120,14 @@ The surfaces now exist; this wires the paywall.
   - Optional: ad-free, extra daily replays, constellation packs.
 - ☐ **Store/IAP plumbing** — `in_app_purchase`, product IDs, restore-purchases.
 
-**Effort:** medium. **Dependencies:** cleanest after the Quantum picker and themes
+**Effort:** medium. **Dependencies:** cleanest after the Syntropy picker and themes
 are the obvious value props (they are).
 
 ---
 
 ## Phase 4 — Progression menu / surface the unlock loop
 
-Right now mechanic unlocks (`seen_*` flags → Field Guide → Quantum picker) are
+Right now mechanic unlocks (`seen_*` flags → Field Guide → Syntropy picker) are
 invisible in the main flow.
 
 - ☐ **Home-screen progression** — current stage, next unlock teaser ("Wormholes at
@@ -167,7 +167,7 @@ Done so far: **Phase 0 (partial)**, **Phase 1 icon**, **Phase 2 retention**, and
 
 **Next:** **Descent Phase B** (roguelike skeleton — the marquee track) **and/or** an
 **on-device tuning pass** (Entropy balance, multiverse length, entangled frequency —
-all `// TUNE`). Then **Phase 3 monetization** (hooks all exist: Quantum picker,
+all `// TUNE`). Then **Phase 3 monetization** (hooks all exist: Syntropy picker,
 Penrose theme, HINT allowance), **Phase 4** progression menu, the **name** decision,
 and **Phase 5** extras. Tuning is cheap and unblocks honest balancing; Descent is the
 biggest session-length/retention lever.
