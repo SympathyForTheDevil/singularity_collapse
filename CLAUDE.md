@@ -280,10 +280,21 @@ one-shot audio cue when the meter *crosses up* a band — `AudioService.entropyW
 - **`StreakScreen`** (home ✨ icon) — current-week strip, freeze tokens, stat strip,
   and the astrophysics **milestone ladder** (3 Photon … 1000 Big Bang).
 
-**HINT button (`_showHintSteps`).** Reveals the next ~3 correct cells (from the longest
-path-vs-`grid.solution` prefix) as pulsing markers; auto-clears after 4s; forfeits
-UNAIDED and costs entropy in Entropy mode. **Premium hook:** gate hint count later.
-Distinct from the full **SOLUTION** reveal (`_toggleSolution`).
+**HINT button (`_showHintSteps`) — guided.** Finds the longest prefix of the
+player's path that still matches `grid.solution`, **erases the stray part of the
+worldline back to that last-correct cell** (snapping before any `_atomic` move it
+would split, like `_truncateTo`), highlights the next ~3 correct cells (a pulsing
+connector from the head + brightest ring on the immediate step), and **locks input
+to the first cell** (`_hintTarget`): in `_onPan`, while a hint is up, only that cell
+may be stepped — so the hint persists (no auto-clear) and clears *exactly* when the
+correct move is made. Pressing HINT again dismisses it (no charge); undo/reset/
+backtrack clear it via `_clearHint()` (which now clears `_hintCells`+`_hintTarget`).
+Works with every mechanic because `solution[t]` is always the steppable *entry* of
+any atomic move (wormhole/well/bridge), and `_onPan` runs the atomic jump on entry —
+the test *"hint: every solution step is reachable for all mechanics"* asserts every
+consecutive solution step is `linked`. Forfeits UNAIDED + costs entropy per new hint.
+**Premium hook:** gate hint count later. Distinct from the full **SOLUTION** reveal
+(`_toggleSolution`).
 
 **Portrait only.** Locked in `main.dart`. Do not add landscape.
 

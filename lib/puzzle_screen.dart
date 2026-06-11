@@ -142,8 +142,9 @@ class _PuzzleScreenState extends State<PuzzleScreen>
   bool _seenLoaded = false;
   final List<GuideEntry> _cards = [];       // queued tutorial cards (front = active)
   bool _showSolution = false;              // reveal the full answer (playtest / premium)
-  List<int> _hintCells = const [];         // a few next-step hint cells (premium hook)
-  Timer? _hintCellsTimer;
+  List<int> _hintCells = const [];         // next-step hint cells shown (display)
+  int? _hintTarget;                        // while a hint is up, the only cell that
+                                           // may be stepped (clears once it's taken)
   static const int _hintSteps = 3;         // how many next cells a hint reveals
 
   // Atomic moves (a gravity-well launch or a wormhole teleport) span several
@@ -330,7 +331,6 @@ class _PuzzleScreenState extends State<PuzzleScreen>
     // (ambient hum keeps playing — it's app-wide)
     _timer?.cancel();
     _hintTimer?.cancel();
-    _hintCellsTimer?.cancel();
     _pulse.dispose();
     _solve.dispose();
     _nudge.dispose();
@@ -442,8 +442,6 @@ class _PuzzleScreenState extends State<PuzzleScreen>
     _measure.reset();
     _atomic.clear();
     _showSolution = false;     // new board → hide any revealed solution
-    _hintCellsTimer?.cancel();
-    _hintCells = const [];
     _trace.stop();
     _cards.clear();
     _startTimer();
@@ -513,7 +511,9 @@ class _PuzzleScreenState extends State<PuzzleScreen>
 
   void _clearHint() {
     _hintTimer?.cancel();
-    if (_hint != null) _hint = null;
+    _hint = null;
+    _hintCells = const [];
+    _hintTarget = null;
   }
 
   /// True when [target] is the Black Hole, it is next in milestone order, and is
@@ -718,7 +718,12 @@ class _PuzzleScreenState extends State<PuzzleScreen>
       return;
     }
 
+    // While a hint is shown, only the suggested cell may be stepped — so the hint
+    // clears exactly when the correct move is made (not on a wrong one).
+    if (_hintTarget != null && cell != _hintTarget) return;
+
     if (_canStep(cell)) {
+      if (_hintTarget != null) _clearHint();   // the suggested move is being taken
       // ── Gravity-well launch ─────────────────────────────────────────────
       final wdir = grid.wellDir(cell);
       if (wdir != null) {
@@ -848,31 +853,45 @@ class _PuzzleScreenState extends State<PuzzleScreen>
     }
   }
 
-  /// Reveal the next few correct cells (a nudge, not the whole answer). Computed
-  /// from the longest prefix of the player's path that matches the solution, so
-  /// it points the way forward (or back onto the path if they've strayed). A
-  /// premium hook: gate count/availability behind an entitlement later.
+  /// Guided HINT. Rewinds the worldline back to the last cell that still matches
+  /// the solution (erasing a wrong turn), highlights the next correct cells, and
+  /// **locks input to the first one** so the hint only clears once that correct
+  /// move is made (handled in `_onPan`). Pressing HINT again dismisses it.
+  /// A premium hook: gate count/availability behind an entitlement later.
   void _showHintSteps() {
     if (solved) return;
     AudioService.instance.ui();
+    if (_hintTarget != null) {            // already showing → dismiss (no charge)
+      setState(_clearHint);
+      return;
+    }
     final sol = grid.solution;
+    // Longest prefix of the player's path that still matches the solution.
     var m = 0;
     while (m < path.length && m < sol.length && path[m] == sol[m]) {
       m++;
     }
-    final hint = <int>[];
-    for (var i = m; i < sol.length && hint.length < _hintSteps; i++) {
-      if (!path.contains(sol[i])) hint.add(sol[i]);
+    // Truncate to index t (keep solution[0..t-1]); snap before any atomic move
+    // (well launch / wormhole / bridge) that t would otherwise split.
+    var t = m;
+    _atomic.forEach((s, len) { if (t > s && t < s + len) t = s; });
+    if (t < 1 || t >= sol.length) return; // already correct to the end
+    // Erase the stray part of the worldline back to the last correct cell.
+    if (path.length > t) {
+      path.removeRange(t, path.length);
+      _atomic.removeWhere((s, _) => s >= t);
     }
-    if (hint.isEmpty) return;
-    _peeked = true;            // a hint also forfeits the UNAIDED badge
+    final next = sol[t];
+    if (!_canStep(next)) {                // safety: shouldn't happen on a valid sol
+      setState(() {});
+      return;
+    }
+    _hintCells  = sol.sublist(t, min(t + _hintSteps, sol.length));
+    _hintTarget = next;                   // lock stepping to this cell until taken
+    _peeked = true;                       // a hint forfeits the UNAIDED badge
     _addEntropy(_kEntHint);
     HapticFeedback.selectionClick();
-    setState(() => _hintCells = hint);
-    _hintCellsTimer?.cancel();
-    _hintCellsTimer = Timer(const Duration(milliseconds: 4000), () {
-      if (mounted) setState(() => _hintCells = const []);
-    });
+    setState(() {});
   }
 
   void _onSolved() {
@@ -2120,8 +2139,14 @@ class _PuzzlePainter extends CustomPainter {
     });
 
     // ── Hint markers (next-step nudge) ──────────────────────────────────────
-    // Pulsing rings on the next correct cells; brightest for the immediate step,
-    // fading along the short look-ahead.
+    // A pulsing connector from the head to the next required cell (input is locked
+    // to it), plus rings on the short look-ahead — brightest for the immediate step.
+    if (hintCells.isNotEmpty && path.isNotEmpty) {
+      canvas.drawLine(center(path.last), center(hintCells.first), Paint()
+        ..color = const Color(0xff9fe8ff).withValues(alpha: 0.30 + pulseV * 0.40)
+        ..strokeWidth = 3 ..strokeCap = StrokeCap.round
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2));
+    }
     for (var i = 0; i < hintCells.length; i++) {
       final p = center(hintCells[i]);
       final a = (1.0 - i * 0.28).clamp(0.3, 1.0);

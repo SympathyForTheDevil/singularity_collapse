@@ -97,6 +97,33 @@ void main() {
     }
   });
 
+  test('hint: every solution step is reachable for all mechanics', () {
+    // The guided HINT rewinds to the longest solution prefix, then steps
+    // solution[t] — which must be reachable from solution[t-1]. That holds iff
+    // every consecutive solution step is `linked` (grid-adjacent + wall-free, or a
+    // wormhole/bridge jump). Wells & gated edges are grid-adjacent, so covered.
+    final forces = <Set<PuzzleFeature>>[
+      {},
+      {PuzzleFeature.wormhole},
+      {PuzzleFeature.massGate},
+      {PuzzleFeature.gravityWell},
+      {PuzzleFeature.entangled},
+      {PuzzleFeature.wormhole, PuzzleFeature.massGate, PuzzleFeature.gravityWell},
+      {PuzzleFeature.multiverse},
+    ];
+    for (final force in forces) {
+      final mvBoards = force.contains(PuzzleFeature.multiverse) ? 2 : null;
+      for (var seed = 0; seed < 20; seed++) {
+        final g = PuzzleGrid.generate(12,
+            rng: Random(seed), force: force, multiverseBoards: mvBoards);
+        for (var i = 0; i + 1 < g.solution.length; i++) {
+          expect(g.linked(g.solution[i], g.solution[i + 1]), isTrue,
+              reason: 'force=$force seed=$seed step=$i unreachable');
+        }
+      }
+    }
+  });
+
   test('wormholes are skill-gated below kWormholeLevel', () {
     for (var level = 1; level < kWormholeLevel; level++) {
       // Try several seeds; early levels must never spawn a wormhole.
