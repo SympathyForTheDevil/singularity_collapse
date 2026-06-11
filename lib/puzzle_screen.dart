@@ -172,22 +172,24 @@ class _PuzzleScreenState extends State<PuzzleScreen>
   int    _runScore  = 0;     // accrues per board solved this run
   int    _bestScore = 0;     // best run at this difficulty (loaded on game over)
   bool   _runOver   = false; // entropy hit 1.0 → run ended
-  static const double _kEntBacktrack = 0.04;  // TUNE — entropy per backtrack
-  static const double _kEntHint      = 0.06;  // TUNE — per hint
-  static const double _kEntSolution  = 0.25;  // TUNE — per solution peek
-  static const double _kEntVent      = 0.28;  // TUNE — relief on solving a board
-  static const double _kEntStep      = 0.05;  // TUNE — entropy added per tick
+  static const double _kEntHint     = 0.05;  // TUNE — per hint
+  static const double _kEntSolution = 0.20;  // TUNE — per solution peek
 
-  /// Seconds between passive entropy ticks — gentler on Easy, harsher on Hard,
-  /// and tightening with depth. Medium ≈ every 9s early (per the "8–10" target).
-  int _entropyTick() {
-    final base = switch (widget.difficulty) {
-      RunDifficulty.easy   => 12,
-      RunDifficulty.medium => 9,
-      RunDifficulty.hard   => 6,
-    };
-    return (base - level ~/ 4).clamp(3, base);   // TUNE — speeds up as you go deep
+  /// Per-difficulty entropy tuning (all // TUNE). Easy is very forgiving — a slow
+  /// passive tick, a small step, a big solve-vent and cheap backtracks — so it
+  /// stays gentle well past level 5; Hard is tight. Depth gently shortens the tick.
+  ({int tick, double step, double vent, double backtrack}) _ent() {
+    final (int baseTick, int floor, double step, double vent, double back) =
+      switch (widget.difficulty) {
+        RunDifficulty.easy   => (18, 11, 0.032, 0.36, 0.025),
+        RunDifficulty.medium => (12, 7,  0.048, 0.30, 0.040),
+        RunDifficulty.hard   => (8,  4,  0.062, 0.26, 0.050),
+      };
+    return (tick: max(floor, baseTick - level ~/ 7),     // slow depth-tightening
+            step: step, vent: vent, backtrack: back);
   }
+
+  int _entropyTick() => _ent().tick;
 
   /// Score reward multiplier per difficulty.
   double _scoreMult() => switch (widget.difficulty) {
@@ -250,7 +252,7 @@ class _PuzzleScreenState extends State<PuzzleScreen>
               final clean = !_backtracked && !_peeked;
               final raw = 50 + level * 15 + (clean ? 40 : 0) + max(0, 45 - _seconds);
               _runScore += (raw * _scoreMult()).round();
-              _entropy = (_entropy - _kEntVent).clamp(0.0, 1.0);
+              _entropy = (_entropy - _ent().vent).clamp(0.0, 1.0);
             }
             _newPuzzle(advance: true);
           }
@@ -327,7 +329,7 @@ class _PuzzleScreenState extends State<PuzzleScreen>
       final s = _seconds + 1;
       // Passive entropy ticks up once every _entropyTick() seconds.
       if (_isEntropy && s % _entropyTick() == 0) {
-        _entropy = (_entropy + _kEntStep).clamp(0.0, 1.0);
+        _entropy = (_entropy + _ent().step).clamp(0.0, 1.0);
       }
       setState(() => _seconds = s);
       if (_isEntropy && _entropy >= 1.0) _triggerGameOver();
@@ -359,6 +361,10 @@ class _PuzzleScreenState extends State<PuzzleScreen>
 
   void _newPuzzle({bool advance = false}) {
     if (!_isDaily && advance) { level++; solvedCount++; }
+    // Track the deepest level reached this difficulty (gates Medium/Hard unlock).
+    if (_isEntropy && advance) {
+      ProgressService.recordLevel(widget.difficulty.name, level);
+    }
     final rng = _isDaily ? Random(DailyService.todaySeed()) : null;  // null → fresh random each puzzle
     var lvl = widget.fixedLevel ?? (_isDaily ? DailyService.dailyLevel() : level);
 
@@ -427,7 +433,7 @@ class _PuzzleScreenState extends State<PuzzleScreen>
     path
       ..clear()
       ..add(grid.startCell);
-    _backtracked = true; _addEntropy(_kEntBacktrack);
+    _backtracked = true; _addEntropy(_ent().backtrack);
     _clearHint();
     _warp.reset();   // portals back to their idle look
     _unlock.reset();
@@ -451,7 +457,7 @@ class _PuzzleScreenState extends State<PuzzleScreen>
     } else {
       path.removeLast();
     }
-    _backtracked = true; _addEntropy(_kEntBacktrack);
+    _backtracked = true; _addEntropy(_ent().backtrack);
     _clearHint();
     HapticFeedback.selectionClick();
     setState(() {});
@@ -467,7 +473,7 @@ class _PuzzleScreenState extends State<PuzzleScreen>
     if (i < 0) return;
     path.removeRange(i + 1, path.length);
     _atomic.removeWhere((s, len) => s > i);
-    _backtracked = true; _addEntropy(_kEntBacktrack);
+    _backtracked = true; _addEntropy(_ent().backtrack);
     _clearHint();
     HapticFeedback.selectionClick();
     setState(() {});
@@ -681,7 +687,7 @@ class _PuzzleScreenState extends State<PuzzleScreen>
       // during forward motion is ignored.
       if (_deepInside(local, cell)) {
         path.removeLast();
-        _backtracked = true; _addEntropy(_kEntBacktrack);
+        _backtracked = true; _addEntropy(_ent().backtrack);
         _clearHint();
         HapticFeedback.selectionClick();
         setState(() {});

@@ -224,16 +224,23 @@ monetization lands (no gate yet).
 - **Quantum** — the customizable safe haven (above); no stakes.
 
 **Entropy mode (high-score survival).** A run-wide **entropy meter** (`_entropy`, 0..1)
-is the fail state. It **rises** on a passive interval tick (`_entropyTick()` seconds:
-Easy 12 / Medium 9 / Hard 6, tightening with depth; `+_kEntStep` each) and on mistakes
+is the fail state. It **rises** on a passive interval tick and on mistakes
 (`_addEntropy`: backtrack/hint/solution costs — so PERFECT/UNAIDED play is survival
-skill). **Solving vents it** (`_kEntVent`) and **scores** the board
-(`base + level + clean + speed`, × difficulty multiplier 1.0/1.3/1.7). Fill the bar
-mid-board → **HEAT DEATH** overlay (score + best + NEW RUN). Best score is per-difficulty
-(`ProgressService.bestEntropy/recordEntropy`, shown on the home difficulty chips). All
-magnitudes are `// TUNE` constants — **needs an on-device balance pass**.
-`RunDifficulty {easy,medium,hard}` is chosen on the home chips (persisted
-`entropy_difficulty`). Daily & Quantum have **no** entropy.
+skill); **solving vents it** and **scores** the board (`base + level + clean + speed`,
+× difficulty multiplier 1.0/1.3/1.7). Fill the bar mid-board → **HEAT DEATH** overlay
+(score + best + NEW RUN). All magnitudes live in **`_ent()`** — a single per-difficulty
+record `(tick, step, vent, backtrack)`, all `// TUNE`: **Easy** is very forgiving
+(18 s tick · 0.032 step · 0.36 vent · 0.025 backtrack — stays gentle past level 5),
+**Medium** (12 / 0.048 / 0.30 / 0.040), **Hard** tight (8 / 0.062 / 0.26 / 0.050). Depth
+gently shortens the tick (`baseTick − level~/7`, floored). Hint/solution costs are the
+globals `_kEntHint`/`_kEntSolution`.
+**Difficulty unlock ladder:** Easy is always open; **Medium unlocks at Easy Lv 16**,
+**Hard at Medium Lv 16** (`_kUnlockLevel`=16). Max level reached per difficulty is
+tracked by `ProgressService.recordLevel`/`bestLevel` (`entropy_maxlevel_<diff>`,
+recorded each level-advance in `_newPuzzle`); the home chips lock/grey accordingly,
+show the next-unlock hint, and fall back to Easy if a remembered locked tier is chosen.
+Best score is per-difficulty (`ProgressService.bestEntropy/recordEntropy`). Daily &
+Quantum have **no** entropy.
 
 **Daily meta-progression.**
 - **Badges** (`ProgressService`, per-day bitmask) — collectible per-solve achievements:

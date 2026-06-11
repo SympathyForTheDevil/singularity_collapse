@@ -84,4 +84,21 @@ class ProgressService {
     if (score > best) { await p.setInt(_bestKey(diff), score); return score; }
     return best;
   }
+
+  // ── Entropy-run max level reached (per difficulty) ──────────────────────────
+  // Gates the harder difficulties: Medium unlocks at Easy Lv 16, Hard at Medium 16.
+  static String _lvlKey(String diff) => 'entropy_maxlevel_$diff';
+
+  static Future<int> bestLevel(String diff) async {
+    final p = await SharedPreferences.getInstance();
+    return p.getInt(_lvlKey(diff)) ?? 0;
+  }
+
+  /// Record the max [level] reached on an entropy run at [diff] (keeps the max).
+  static Future<void> recordLevel(String diff, int level) async {
+    final p = await SharedPreferences.getInstance();
+    if (level > (p.getInt(_lvlKey(diff)) ?? 0)) {
+      await p.setInt(_lvlKey(diff), level);
+    }
+  }
 }

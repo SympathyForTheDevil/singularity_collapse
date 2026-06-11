@@ -27,6 +27,8 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   bool _showDev     = false;
   RunDifficulty _entropyDiff = RunDifficulty.medium;
   Map<RunDifficulty, int> _entropyBest = const {};
+  Map<RunDifficulty, int> _maxLevel    = const {};
+  static const int _kUnlockLevel = 16;   // reach this on a tier to unlock the next
 
   late final AnimationController _pulse;
 
@@ -59,13 +61,30 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       for (final d in RunDifficulty.values)
         d: await ProgressService.bestEntropy(d.name),
     };
+    final maxLvl = {
+      for (final d in RunDifficulty.values)
+        d: await ProgressService.bestLevel(d.name),
+    };
+    bool unlocked(RunDifficulty d) => switch (d) {
+      RunDifficulty.easy   => true,
+      RunDifficulty.medium => (maxLvl[RunDifficulty.easy]   ?? 0) >= _kUnlockLevel,
+      RunDifficulty.hard   => (maxLvl[RunDifficulty.medium] ?? 0) >= _kUnlockLevel,
+    };
     if (mounted) {
       setState(() {
         _solvedToday = solved; _streak = streak;
-        _entropyDiff = diff; _entropyBest = best; _loaded = true;
+        // Fall back to Easy if the remembered difficulty is still locked.
+        _entropyDiff = unlocked(diff) ? diff : RunDifficulty.easy;
+        _entropyBest = best; _maxLevel = maxLvl; _loaded = true;
       });
     }
   }
+
+  bool _diffUnlocked(RunDifficulty d) => switch (d) {
+    RunDifficulty.easy   => true,
+    RunDifficulty.medium => (_maxLevel[RunDifficulty.easy]   ?? 0) >= _kUnlockLevel,
+    RunDifficulty.hard   => (_maxLevel[RunDifficulty.medium] ?? 0) >= _kUnlockLevel,
+  };
 
   Future<void> _goDaily() async {
     AudioService.instance.ui();
@@ -327,13 +346,32 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                     const SizedBox(height: 7),
                     Builder(builder: (_) {
                       final best = _entropyBest[_entropyDiff] ?? 0;
-                      return Text(
-                        best > 0 ? 'BEST  ·  $best' : 'NO RUNS YET',
-                        style: TextStyle(
-                          color: best > 0
-                            ? const Color(0xff8aa6bc) : const Color(0xff44607a),
-                          fontSize: 10, fontFamily: 'monospace', letterSpacing: 2,
-                          fontWeight: best > 0 ? FontWeight.bold : FontWeight.normal));
+                      final lvl  = _maxLevel[_entropyDiff] ?? 0;
+                      final line = best > 0
+                        ? 'BEST  ·  $best${lvl > 0 ? '   ·   LV $lvl' : ''}'
+                        : (lvl > 0 ? 'REACHED  LV $lvl' : 'NO RUNS YET');
+                      final hasRuns = best > 0 || lvl > 0;
+                      // Next-tier unlock hint.
+                      final lock = !_diffUnlocked(RunDifficulty.medium)
+                        ? 'MEDIUM unlocks at EASY · LV $_kUnlockLevel'
+                        : !_diffUnlocked(RunDifficulty.hard)
+                          ? 'HARD unlocks at MEDIUM · LV $_kUnlockLevel'
+                          : null;
+                      return Column(children: [
+                        Text(line,
+                          style: TextStyle(
+                            color: hasRuns
+                              ? const Color(0xff8aa6bc) : const Color(0xff44607a),
+                            fontSize: 10, fontFamily: 'monospace', letterSpacing: 2,
+                            fontWeight: hasRuns ? FontWeight.bold : FontWeight.normal)),
+                        if (lock != null) ...[
+                          const SizedBox(height: 4),
+                          Text(lock,
+                            style: const TextStyle(
+                              color: Color(0xff44607a), fontSize: 8.5,
+                              fontFamily: 'monospace', letterSpacing: 1.5)),
+                        ],
+                      ]);
                     }),
                     const SizedBox(height: 14),
 
@@ -466,13 +504,16 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       RunDifficulty.easy: 'EASY', RunDifficulty.medium: 'MEDIUM', RunDifficulty.hard: 'HARD',
     };
     const c = Color(0xff44aaff);
-    final sel = _entropyDiff == d;
+    final unlocked = _diffUnlocked(d);
+    final sel = _entropyDiff == d && unlocked;
     return GestureDetector(
-      onTap: () {
-        AudioService.instance.ui();
-        setState(() => _entropyDiff = d);
-        _saveDiff();
-      },
+      onTap: unlocked
+          ? () {
+              AudioService.instance.ui();
+              setState(() => _entropyDiff = d);
+              _saveDiff();
+            }
+          : null,
       child: Container(
         margin: const EdgeInsets.symmetric(horizontal: 4),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
@@ -481,10 +522,21 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           borderRadius: BorderRadius.circular(8),
           border: Border.all(
             color: sel ? c : const Color(0xff223344), width: 1.2)),
-        child: Text(labels[d]!,
-          style: TextStyle(
-            color: sel ? c : const Color(0xff5a7488), fontSize: 10,
-            fontFamily: 'monospace', fontWeight: FontWeight.bold, letterSpacing: 2)),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (!unlocked) ...[
+              const Icon(Icons.lock_rounded, size: 9, color: Color(0xff44607a)),
+              const SizedBox(width: 4),
+            ],
+            Text(labels[d]!,
+              style: TextStyle(
+                color: !unlocked ? const Color(0xff3a526a)
+                     : sel ? c : const Color(0xff5a7488),
+                fontSize: 10, fontFamily: 'monospace',
+                fontWeight: FontWeight.bold, letterSpacing: 2)),
+          ],
+        ),
       ),
     );
   }
