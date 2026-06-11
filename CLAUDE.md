@@ -123,7 +123,10 @@ through a global Freeverb send for a cosmic space:
   **Rotation model:** the player chooses which tracks are **enabled** (`_enabledMusic`
   set, persisted `music_enabled`; defaults to all) in Settings; `_pickTrack()` plays a
   random enabled one and `nextTrack()` rotates to a *different* one **on every
-  level-up** (called from `_newPuzzle(advance:)`). **Scoped to gameplay, not the
+  level-up** (called from `_newPuzzle(advance:)`). In **Settings** each row taps two
+  ways: tap-to-**preview** (`previewTrack(id)` force-plays that track regardless of
+  the enabled set, highlighting the row while it's `currentTrack`) and a **checkbox**
+  to toggle rotation membership (`setEnabled`). **Scoped to gameplay, not the
   menu:** plays only while a *music context* is active — `PuzzleScreen` / the Settings
   preview call `enterMusicContext()`/`exitMusicContext()`. `_musicShouldPlay` is the
   single gate (`ready && !muted && !backgrounded && musicOn && context && enabled

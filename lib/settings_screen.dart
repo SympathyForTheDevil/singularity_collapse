@@ -66,6 +66,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
+  void _previewTrack(String id) {
+    AudioService.instance.previewTrack(id);   // hear it without changing rotation
+    setState(() {});                          // refresh the "now playing" highlight
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -120,7 +125,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   const SizedBox(height: 28),
                   _sectionLabel('MUSIC ROTATION'),
                   const SizedBox(height: 4),
-                  const Text('enabled songs play in random rotation · one per level',
+                  const Text('tap a song to preview · check it to add · one per level',
                     style: TextStyle(
                       color: Color(0xff6688aa), fontSize: 9.5,
                       fontFamily: 'monospace', letterSpacing: 1)),
@@ -222,44 +227,66 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Widget _trackTile(MusicTrack t) {
     final on = _enabled.contains(t.id);
-    return GestureDetector(
-      onTap: () => _toggleEnabled(t.id),
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 10),
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: _panel,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(
-            color: on ? _purple.withValues(alpha: 0.8) : const Color(0xff2a3c4e),
-            width: on ? 1.5 : 1),
-        ),
-        child: Row(
-          children: [
-            Icon(Icons.music_note_rounded,
-              color: on ? _gold : const Color(0xff35485a), size: 24),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(t.title.toUpperCase(),
-                    style: TextStyle(
-                      color: on ? Colors.white : const Color(0xff8aa6bc),
-                      fontSize: 13, fontFamily: 'monospace',
-                      fontWeight: FontWeight.bold, letterSpacing: 2)),
-                  const SizedBox(height: 2),
-                  Text(t.composer,
-                    style: const TextStyle(
-                      color: Color(0xff5a7488), fontSize: 10,
-                      fontFamily: 'monospace', letterSpacing: 1)),
-                ],
+    final playing = AudioService.instance.currentTrack == t.id;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      decoration: BoxDecoration(
+        color: _panel,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: playing ? _cyan.withValues(alpha: 0.8)
+               : on ? _purple.withValues(alpha: 0.8)
+               : const Color(0xff2a3c4e),
+          width: (playing || on) ? 1.5 : 1),
+      ),
+      child: Row(
+        children: [
+          // Left: tap to preview (hear it without touching the rotation).
+          Expanded(
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () => _previewTrack(t.id),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(12, 12, 8, 12),
+                child: Row(
+                  children: [
+                    Icon(playing ? Icons.graphic_eq_rounded : Icons.play_arrow_rounded,
+                      color: playing ? _cyan : const Color(0xff5a7488), size: 22),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(t.title.toUpperCase(),
+                            style: TextStyle(
+                              color: on ? Colors.white : const Color(0xff8aa6bc),
+                              fontSize: 13, fontFamily: 'monospace',
+                              fontWeight: FontWeight.bold, letterSpacing: 2)),
+                          const SizedBox(height: 2),
+                          Text(t.composer,
+                            style: const TextStyle(
+                              color: Color(0xff5a7488), fontSize: 10,
+                              fontFamily: 'monospace', letterSpacing: 1)),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
-            Icon(on ? Icons.check_box_rounded : Icons.check_box_outline_blank_rounded,
-              color: on ? _purple : const Color(0xff35485a), size: 22),
-          ],
-        ),
+          ),
+          // Right: checkbox to add/remove from the rotation.
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => _toggleEnabled(t.id),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(8, 12, 14, 12),
+              child: Icon(
+                on ? Icons.check_box_rounded : Icons.check_box_outline_blank_rounded,
+                color: on ? _purple : const Color(0xff35485a), size: 24),
+            ),
+          ),
+        ],
       ),
     );
   }

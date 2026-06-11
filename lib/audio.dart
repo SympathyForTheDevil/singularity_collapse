@@ -90,6 +90,7 @@ class AudioService with WidgetsBindingObserver {
   static const _musicVolKey = 'music_volume';
   static const _sfxVolKey   = 'sfx_volume';
   Set<String> get enabledMusic => _enabledMusic;
+  String get currentTrack => _currentTrack;   // playing track (for settings preview)
   bool   get musicOn     => _musicOn;
   double get musicVolume => _musicVolume;
   double get sfxVolume   => _sfxVolume;
@@ -262,6 +263,28 @@ class AudioService with WidgetsBindingObserver {
     _updateMusic();
     final prefs = await SharedPreferences.getInstance();
     await prefs.setStringList(_enabledKey, _enabledMusic.toList());
+  }
+
+  /// Preview a specific track on the settings screen — plays it now regardless of
+  /// whether it's in the rotation. Leaves the enabled set untouched; in-game
+  /// rotation resumes from the enabled pool afterwards.
+  Future<void> previewTrack(String id) async {
+    if (!_ready || _muted || !_musicContext || _musicStarting) return;
+    _currentTrack = id;
+    final old = _musicHandle;                  // fade out whatever's playing
+    _musicHandle = null;
+    if (old != null) {
+      _soloud.fadeVolume(old, 0, const Duration(milliseconds: 250));
+      _soloud.schedulePause(old, const Duration(milliseconds: 300));
+    }
+    _musicStarting = true;
+    final src = await _ensureTrack(id);
+    _musicStarting = false;
+    if (src == null || _musicHandle != null || _muted || !_musicContext) return;
+    final h = _soloud.play(src, volume: 0, looping: true);
+    _musicHandle = h;
+    _soloud.setProtectVoice(h, true);
+    _soloud.fadeVolume(h, _musicVolume, const Duration(milliseconds: 450));
   }
 
   /// Quick music on/off (the pause-menu toggle), separate from the enabled set.
