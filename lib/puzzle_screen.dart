@@ -365,6 +365,8 @@ class _PuzzleScreenState extends State<PuzzleScreen>
     if (_isEntropy && advance) {
       ProgressService.recordLevel(widget.difficulty.name, level);
     }
+    if (advance) AudioService.instance.nextTrack();   // rotate the soundtrack
+
     final rng = _isDaily ? Random(DailyService.todaySeed()) : null;  // null → fresh random each puzzle
     var lvl = widget.fixedLevel ?? (_isDaily ? DailyService.dailyLevel() : level);
 
@@ -806,11 +808,11 @@ class _PuzzleScreenState extends State<PuzzleScreen>
     AudioService.instance.ui();   // audible only when now un-muted — a confirm
   }
 
-  /// Stop the soundtrack, or resume the last-chosen piece — from the pause menu.
+  /// Stop / resume the soundtrack from the pause menu (the music-only toggle).
   Future<void> _toggleMusic() async {
     final a = AudioService.instance;
-    AudioService.instance.ui();
-    await a.setTrack(a.musicTrack.isNotEmpty ? '' : a.lastTrack);
+    a.ui();
+    await a.setMusicOn(!a.musicOn);
     if (mounted) setState(() {});
   }
 
@@ -1226,7 +1228,7 @@ class _PuzzleScreenState extends State<PuzzleScreen>
               _toggleMute),
             const SizedBox(height: 12),
             _overlayBtn(
-              AudioService.instance.musicTrack.isNotEmpty ? 'MUSIC OFF' : 'MUSIC ON',
+              AudioService.instance.musicOn ? 'MUSIC OFF' : 'MUSIC ON',
               const Color(0xff7799aa), _toggleMusic),
             const SizedBox(height: 12),
             _overlayBtn('HOME', const Color(0xff7799aa),

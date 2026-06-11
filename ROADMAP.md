@@ -148,11 +148,11 @@ invisible in the main flow.
   on/off + a **classical music** picker (synthesized public-domain loops: Bach
   Prelude in C, Satie Gymnopédie No. 1, Chopin Prelude in A, Korobeiniki/Tetris,
   Bach Menuet BWV 814, Tchaikovsky Sugar Plum Fairy, plus a Bach Toccata/BWV 565
-  *techno* remix with a synth-drum engine; Clair de Lune queued) + a
-  music-volume slider. Music is scoped to gameplay/settings with a pause-menu
-  toggle and pauses on app-background. Still
-  open: SFX volume slider, a produced collapse-stinger sample, per-mode ambient
-  intensity.
+  *techno* remix with a synth-drum engine; Clair de Lune queued). Songs are
+  enabled per-track in Settings and play in **random rotation, changing each
+  level**; **separate SFX + music volume sliders** + a master mute; scoped to
+  gameplay with a pause-menu toggle; pauses on app-background. Still open: a
+  produced collapse-stinger sample, per-mode ambient intensity.
 - ☐ **Penrose × multiverse combo** — currently Penrose is forced off in multiverse;
   compose the transforms if wanted.
 - ☐ **Rectangular single-board variety** — the rectangular geometry now exists

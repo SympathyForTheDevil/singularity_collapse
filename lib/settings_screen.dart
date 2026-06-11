@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'audio.dart';
 
-/// Settings — the home for audio options (and room to grow: SFX, themes…).
-/// Currently: master sound on/off, the classical music-track picker, and a music
-/// volume slider. All changes apply live and persist via [AudioService].
+/// Settings — the home for audio options (and room to grow: themes…). Master
+/// sound on/off, separate SFX + music volume sliders, and the song checklist that
+/// chooses which tracks join the in-game random rotation. Applies live + persists.
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
   @override
@@ -18,22 +18,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
   static const _border = Color(0xff223344);
 
   late bool _muted;
-  late String _track;
-  late double _volume;
+  late double _sfxVol;
+  late double _musicVol;
+  late Set<String> _enabled;
 
   @override
   void initState() {
     super.initState();
     final a = AudioService.instance;
-    _muted  = a.muted;
-    _track  = a.musicTrack;
-    _volume = a.musicVolume;
-    a.enterMusicContext();   // preview the soundtrack while on this screen
+    _muted    = a.muted;
+    _sfxVol   = a.sfxVolume;
+    _musicVol = a.musicVolume;
+    _enabled  = {...a.enabledMusic};
+    a.enterMusicContext();   // preview the rotation while on this screen
   }
 
   @override
   void dispose() {
-    AudioService.instance.exitMusicContext();   // no music back on the menu
+    AudioService.instance.exitMusicContext();
     super.dispose();
   }
 
@@ -43,16 +45,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (mounted) setState(() => _muted = AudioService.instance.muted);
   }
 
-  Future<void> _selectTrack(String id) async {
-    if (id == _track) return;
-    AudioService.instance.ui();
-    await AudioService.instance.setTrack(id);
-    if (mounted) setState(() => _track = id);
+  void _setSfxVol(double v) {
+    setState(() => _sfxVol = v);
+    AudioService.instance.setSfxVolume(v);
   }
 
-  void _setVolume(double v) {
-    setState(() => _volume = v);
+  void _setMusicVol(double v) {
+    setState(() => _musicVol = v);
     AudioService.instance.setMusicVolume(v);
+  }
+
+  Future<void> _toggleEnabled(String id) async {
+    final on = !_enabled.contains(id);
+    AudioService.instance.ui();
+    await AudioService.instance.setEnabled(id, on);
+    if (mounted) {
+      setState(() {
+        if (on) { _enabled.add(id); } else { _enabled.remove(id); }
+      });
+    }
   }
 
   @override
@@ -100,22 +111,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   _sectionLabel('AUDIO'),
                   const SizedBox(height: 10),
                   _soundToggle(),
+                  const SizedBox(height: 16),
+                  _volumeRow(Icons.graphic_eq_rounded, 'SFX', _sfxVol, _setSfxVol,
+                    onEnd: () => AudioService.instance.ui()),   // tick at new level
+                  const SizedBox(height: 12),
+                  _volumeRow(Icons.music_note_rounded, 'MUSIC', _musicVol, _setMusicVol),
 
                   const SizedBox(height: 28),
-                  _sectionLabel('MUSIC'),
+                  _sectionLabel('MUSIC ROTATION'),
                   const SizedBox(height: 4),
-                  const Text('synthesized public-domain classical · loops gently',
+                  const Text('enabled songs play in random rotation · one per level',
                     style: TextStyle(
                       color: Color(0xff6688aa), fontSize: 9.5,
                       fontFamily: 'monospace', letterSpacing: 1)),
                   const SizedBox(height: 12),
-                  _trackTile(const MusicTrack('', 'None', 'silence'),
-                    icon: Icons.music_off_rounded),
-                  for (final t in kMusicTracks)
-                    _trackTile(t, icon: Icons.music_note_rounded),
-
-                  const SizedBox(height: 18),
-                  _volumeControl(),
+                  for (final t in kMusicTracks) _trackTile(t),
                 ],
               ),
             ),
@@ -164,10 +174,56 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Widget _trackTile(MusicTrack t, {required IconData icon}) {
-    final selected = _track == t.id;
+  Widget _volumeRow(IconData icon, String label, double value,
+      ValueChanged<double> onChanged, {VoidCallback? onEnd}) {
+    final dim = _muted;
+    final col = dim ? const Color(0xff35485a) : _purple;
+    return Opacity(
+      opacity: dim ? 0.5 : 1.0,
+      child: Row(
+        children: [
+          Icon(icon, color: const Color(0xff5a7488), size: 18),
+          const SizedBox(width: 10),
+          SizedBox(
+            width: 52,
+            child: Text(label,
+              style: const TextStyle(
+                color: Color(0xff5a7488), fontSize: 11, fontFamily: 'monospace',
+                fontWeight: FontWeight.bold, letterSpacing: 2)),
+          ),
+          Expanded(
+            child: SliderTheme(
+              data: SliderThemeData(
+                activeTrackColor: col,
+                inactiveTrackColor: const Color(0xff1c2e3c),
+                thumbColor: dim ? const Color(0xff35485a) : _gold,
+                overlayColor: _purple.withValues(alpha: 0.15),
+                trackHeight: 3,
+              ),
+              child: Slider(
+                value: value,
+                onChanged: onChanged,
+                onChangeEnd: onEnd == null ? null : (_) => onEnd(),
+              ),
+            ),
+          ),
+          SizedBox(
+            width: 34,
+            child: Text('${(value * 100).round()}',
+              textAlign: TextAlign.right,
+              style: TextStyle(
+                color: col, fontSize: 11, fontFamily: 'monospace',
+                fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _trackTile(MusicTrack t) {
+    final on = _enabled.contains(t.id);
     return GestureDetector(
-      onTap: () => _selectTrack(t.id),
+      onTap: () => _toggleEnabled(t.id),
       child: Container(
         margin: const EdgeInsets.only(bottom: 10),
         padding: const EdgeInsets.all(12),
@@ -175,13 +231,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
           color: _panel,
           borderRadius: BorderRadius.circular(10),
           border: Border.all(
-            color: selected ? _purple.withValues(alpha: 0.8) : const Color(0xff2a3c4e),
-            width: selected ? 1.5 : 1),
+            color: on ? _purple.withValues(alpha: 0.8) : const Color(0xff2a3c4e),
+            width: on ? 1.5 : 1),
         ),
         child: Row(
           children: [
-            Icon(icon,
-              color: selected ? _gold : const Color(0xff35485a), size: 24),
+            Icon(Icons.music_note_rounded,
+              color: on ? _gold : const Color(0xff35485a), size: 24),
             const SizedBox(width: 14),
             Expanded(
               child: Column(
@@ -189,7 +245,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 children: [
                   Text(t.title.toUpperCase(),
                     style: TextStyle(
-                      color: selected ? Colors.white : const Color(0xff8aa6bc),
+                      color: on ? Colors.white : const Color(0xff8aa6bc),
                       fontSize: 13, fontFamily: 'monospace',
                       fontWeight: FontWeight.bold, letterSpacing: 2)),
                   const SizedBox(height: 2),
@@ -200,51 +256,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ],
               ),
             ),
-            Icon(selected ? Icons.check_circle : Icons.circle_outlined,
-              color: selected ? _purple : const Color(0xff35485a), size: 22),
+            Icon(on ? Icons.check_box_rounded : Icons.check_box_outline_blank_rounded,
+              color: on ? _purple : const Color(0xff35485a), size: 22),
           ],
         ),
-      ),
-    );
-  }
-
-  Widget _volumeControl() {
-    final enabled = _track.isNotEmpty;
-    final col = enabled ? _purple : const Color(0xff35485a);
-    return Opacity(
-      opacity: enabled ? 1.0 : 0.45,
-      child: Row(
-        children: [
-          const Icon(Icons.graphic_eq_rounded, color: Color(0xff5a7488), size: 18),
-          const SizedBox(width: 10),
-          const Text('VOLUME',
-            style: TextStyle(
-              color: Color(0xff5a7488), fontSize: 11, fontFamily: 'monospace',
-              fontWeight: FontWeight.bold, letterSpacing: 2)),
-          Expanded(
-            child: SliderTheme(
-              data: SliderThemeData(
-                activeTrackColor: col,
-                inactiveTrackColor: const Color(0xff1c2e3c),
-                thumbColor: enabled ? _gold : const Color(0xff35485a),
-                overlayColor: _purple.withValues(alpha: 0.15),
-                trackHeight: 3,
-              ),
-              child: Slider(
-                value: _volume,
-                onChanged: enabled ? _setVolume : null,
-              ),
-            ),
-          ),
-          SizedBox(
-            width: 34,
-            child: Text('${(_volume * 100).round()}',
-              textAlign: TextAlign.right,
-              style: TextStyle(
-                color: col, fontSize: 11, fontFamily: 'monospace',
-                fontWeight: FontWeight.bold)),
-          ),
-        ],
       ),
     );
   }

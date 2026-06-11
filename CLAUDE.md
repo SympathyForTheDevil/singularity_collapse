@@ -113,28 +113,29 @@ through a global Freeverb send for a cosmic space:
   multiverse bridge crossing (distinct from the wormhole `warp()`).
 - **Mute** — toggle on the home screen, persisted via `shared_preferences`
   (`audio_muted`); `AudioService.muted` is honoured by every play call.
-- **Music** (classical soundtrack) — an *optional* looping track of public-domain
-  classical pieces, **synthesized** like everything else (no audio assets, no
-  recording licensing): each piece is note data (`_MusicPiece`/`_Note`) rendered by
-  `_renderPiece` through a soft music-box/celesta voice (`_addVoice`) into **one
-  seamlessly-looping buffer** — each note's decaying tail **wraps around** the
-  buffer end (modular indexing) so the loop has no click/gap/tempo-drift. Tracks
-  are **lazily** synthesized on first selection and cached (`_music` map), and
-  **duck the ambient pad** to `_padTarget*0.5` so the melody sits on top.
-  **Scoped to gameplay, not the menu:** music plays only while a *music context*
-  is active — a game mode (`PuzzleScreen`) or the Settings preview call
-  `enterMusicContext()`/`exitMusicContext()` in init/dispose; the home menu is
-  silent. `_updateMusic()` is the single gate (context && track && !muted &&
-  !backgrounded → start, else stop). The **pause menu** has a MUSIC ON/OFF button
-  (`_toggleMusic` → `setTrack('')` or `setTrack(lastTrack)`); `_lastTrack`
-  (persisted `music_last_track`) lets it resume the player's last pick.
+- **Music** (classical soundtrack) — a **random rotation** of public-domain pieces,
+  **synthesized** like everything else (no audio assets, no recording licensing):
+  each piece is note data (`_MusicPiece`/`_Note`) rendered by `_renderPiece` through
+  the voices (`_addVoice` + the electronic `_add*`) into **one seamlessly-looping
+  buffer** — each note's decaying tail **wraps around** the buffer end (modular
+  indexing) so the loop has no click/gap/tempo-drift. Tracks are **lazily**
+  synthesized + cached (`_music` map) and **duck the ambient pad** to `_padTarget*0.5`.
+  **Rotation model:** the player chooses which tracks are **enabled** (`_enabledMusic`
+  set, persisted `music_enabled`; defaults to all) in Settings; `_pickTrack()` plays a
+  random enabled one and `nextTrack()` rotates to a *different* one **on every
+  level-up** (called from `_newPuzzle(advance:)`). **Scoped to gameplay, not the
+  menu:** plays only while a *music context* is active — `PuzzleScreen` / the Settings
+  preview call `enterMusicContext()`/`exitMusicContext()`. `_musicShouldPlay` is the
+  single gate (`ready && !muted && !backgrounded && musicOn && context && enabled
+  non-empty`). The **pause menu** MUSIC ON/OFF flips `_musicOn` (`setMusicOn`,
+  persisted `music_on`) — a quick mute separate from the enabled set.
+  **Separate volumes:** `_sfxVolume` (every SFX play multiplies by it) and
+  `_musicVolume`, persisted (`sfx_volume`/`music_volume`), each its own slider in
+  Settings; the master **mute** (home/pause/Settings) still kills everything.
   **Backgrounding:** `AudioService` is a `WidgetsBindingObserver` —
-  `didChangeAppLifecycleState` `setPause`s the pad + music handles on
-  paused/hidden and resumes on resumed (so audio doesn't play behind a locked
-  screen / in the app switcher). Selection + volume persist
-  (`music_track`/`music_volume`); silenced by mute. **Future hook:** tracks could
-  be unlock-gated (achievement / premium) — gate `kMusicTracks` entries in the
-  Settings picker like the Quantum picker's `seen_*` gating. Catalogue =
+  `didChangeAppLifecycleState` `setPause`s the pad + music handles on paused/hidden,
+  resumes on resumed. **Future hook:** tracks could be unlock-gated (achievement /
+  premium) — gate `kMusicTracks` entries in the Settings checklist. Catalogue =
   `kMusicTracks` (`MusicTrack` id→title→composer),
   each id mapped to a builder in `_pieceFor`. Per-piece voice envelope on
   `_MusicPiece` (melody/bass decay + ring): plucky music-box (Bach) vs legato

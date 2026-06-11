@@ -68,28 +68,29 @@ class AudioService with WidgetsBindingObserver {
   AudioSource? _pad;
   SoundHandle? _padHandle;
 
-  // Music — a looping classical soundtrack, synthesized lazily on first use. It
-  // plays only while a "music context" is active (a game mode, or the settings
-  // preview) — never on the main menu — and pauses when the app is backgrounded.
-  final Map<String, AudioSource> _music = {};   // id → rendered loop
+  // Music — a pool of *enabled* tracks in random rotation (changes each level),
+  // synthesized lazily. Plays only in a "music context" (a game mode, or the
+  // settings preview) — never on the main menu — and pauses when backgrounded.
+  final Map<String, AudioSource> _music = {};   // id → rendered loop (cache)
+  final Random _rng = Random();
   SoundHandle? _musicHandle;
   bool _musicContext  = false;     // a game / settings screen is active
   bool _backgrounded  = false;     // app is in the background (lock / app switch)
   bool _musicStarting = false;     // guard against overlapping async starts
-  String _musicTrack  = '';        // current track id ('' = off)
-  String _lastTrack   = '';        // last non-empty pick (for the pause toggle)
-  double _musicVolume = 0.7;       // 0..1, user setting
-  double _padTarget   = 0;         // current ambient-pad fade target (for ducking)
-  static const _musicKey     = 'music_track';
-  static const _lastTrackKey = 'music_last_track';
-  static const _musicVolKey  = 'music_volume';
-  String get musicTrack  => _musicTrack;
+  Set<String> _enabledMusic = {};  // track ids in the rotation (empty = silent)
+  String _currentTrack = '';       // id currently playing
+  bool   _musicOn      = true;     // quick on/off (pause-menu toggle)
+  double _musicVolume  = 0.7;      // 0..1
+  double _sfxVolume    = 0.9;      // 0..1 (applied to every sound effect)
+  double _padTarget    = 0;        // current ambient-pad fade target (for ducking)
+  static const _enabledKey  = 'music_enabled';
+  static const _musicOnKey  = 'music_on';
+  static const _musicVolKey = 'music_volume';
+  static const _sfxVolKey   = 'sfx_volume';
+  Set<String> get enabledMusic => _enabledMusic;
+  bool   get musicOn     => _musicOn;
   double get musicVolume => _musicVolume;
-  /// The track the pause-menu "music on" should resume — the last real pick, or
-  /// the first catalogue entry if the player has never chosen one.
-  String get lastTrack => _lastTrack.isNotEmpty
-      ? _lastTrack
-      : (kMusicTracks.isNotEmpty ? kMusicTracks.first.id : '');
+  double get sfxVolume   => _sfxVolume;
 
   // ── Lifecycle ──────────────────────────────────────────────────────────────
   Future<void> init() async {
@@ -97,9 +98,13 @@ class AudioService with WidgetsBindingObserver {
     try {
       final prefs = await SharedPreferences.getInstance();
       _muted       = prefs.getBool(_muteKey) ?? false;
-      _musicTrack  = prefs.getString(_musicKey) ?? '';
-      _lastTrack   = prefs.getString(_lastTrackKey) ?? '';
       _musicVolume = prefs.getDouble(_musicVolKey) ?? 0.7;
+      _sfxVolume   = prefs.getDouble(_sfxVolKey) ?? 0.9;
+      _musicOn     = prefs.getBool(_musicOnKey) ?? true;
+      final validIds = {for (final t in kMusicTracks) t.id};
+      final en = prefs.getStringList(_enabledKey);
+      // Default: every song in the rotation; otherwise the saved set (valid ids).
+      _enabledMusic = (en?.toSet() ?? validIds).intersection(validIds);
       WidgetsBinding.instance.addObserver(this);   // pause audio in background
 
       await _soloud.init(sampleRate: _sr, channels: Channels.stereo);
@@ -140,64 +145,64 @@ class AudioService with WidgetsBindingObserver {
   void milestone(int milestone) {
     if (!_ready || _muted || _notes.isEmpty) return;
     final i = (milestone - 1).clamp(0, _notes.length - 1);
-    _soloud.play(_notes[i], volume: 0.55);
+    _soloud.play(_notes[i], volume: 0.55 * _sfxVolume);
   }
 
   /// A plain cell was filled. A quiet tick, brightening with path [progress]
   /// (0..1), for tactile rhythm without fatigue.
   void step(double progress) {
     if (!_ready || _muted || _step == null) return;
-    final h = _soloud.play(_step!, volume: 0.16);
+    final h = _soloud.play(_step!, volume: 0.16 * _sfxVolume);
     _soloud.setRelativePlaySpeed(h, 0.92 + progress.clamp(0.0, 1.0) * 0.55);
   }
 
   /// Tried to enter the Black Hole too early — a soft dissonant "not yet".
   void denied() {
     if (!_ready || _muted || _denied == null) return;
-    _soloud.play(_denied!, volume: 0.4);
+    _soloud.play(_denied!, volume: 0.4 * _sfxVolume);
   }
 
   /// The region collapses — the big payoff stinger (synced to the 2s animation).
   void collapse() {
     if (!_ready || _muted || _collapse == null) return;
-    _soloud.play(_collapse!, volume: 0.9);
+    _soloud.play(_collapse!, volume: 0.9 * _sfxVolume);
   }
 
   /// Soft UI confirmation for menu / control taps.
   void ui() {
     if (!_ready || _muted || _ui == null) return;
-    _soloud.play(_ui!, volume: 0.3);
+    _soloud.play(_ui!, volume: 0.3 * _sfxVolume);
   }
 
   /// Worldline teleported through a wormhole — a quick portal whoosh.
   void warp() {
     if (!_ready || _muted || _warp == null) return;
-    _soloud.play(_warp!, volume: 0.5);
+    _soloud.play(_warp!, volume: 0.5 * _sfxVolume);
   }
 
   /// Collected a boson → a mass gate opens: a low thunk + rising chime.
   void unlock() {
     if (!_ready || _muted || _unlock == null) return;
-    _soloud.play(_unlock!, volume: 0.6);
+    _soloud.play(_unlock!, volume: 0.6 * _sfxVolume);
   }
 
   /// Flung by a gravity well — a quick descending "fwip".
   void slingshot() {
     if (!_ready || _muted || _sling == null) return;
-    _soloud.play(_sling!, volume: 0.5);
+    _soloud.play(_sling!, volume: 0.5 * _sfxVolume);
   }
 
   /// Entangled superposition collapses on measurement — a glassy shimmer.
   void measure() {
     if (!_ready || _muted || _measure == null) return;
-    _soloud.play(_measure!, volume: 0.55);
+    _soloud.play(_measure!, volume: 0.55 * _sfxVolume);
   }
 
   /// Worldline crossed a multiverse bridge to another universe — a deep rising
   /// sweep into a bright emergence shimmer (more interdimensional than a warp).
   void bridge() {
     if (!_ready || _muted || _bridge == null) return;
-    _soloud.play(_bridge!, volume: 0.55);
+    _soloud.play(_bridge!, volume: 0.55 * _sfxVolume);
   }
 
   // ── Ambient bed ────────────────────────────────────────────────────────────
@@ -229,16 +234,28 @@ class AudioService with WidgetsBindingObserver {
   /// Left the music-enabled screen — stop the soundtrack.
   void exitMusicContext() { _musicContext = false; _updateMusic(); }
 
-  /// Select a track ('' = off). Remembers the last real pick so the pause-menu
-  /// toggle can resume it. Persisted; previews immediately if a context is active.
-  Future<void> setTrack(String id) async {
-    _musicTrack = id;
-    if (id.isNotEmpty) _lastTrack = id;
-    _stopMusic();            // swap cleanly before (maybe) starting the new one
+  /// Enable/disable a track in the rotation (persisted). With a context active,
+  /// turning one ON previews it immediately; turning the playing one OFF switches.
+  Future<void> setEnabled(String id, bool on) async {
+    if (on) {
+      _enabledMusic.add(id);
+      _currentTrack = id;            // preview the just-enabled track
+      _stopMusic();
+    } else {
+      _enabledMusic.remove(id);
+      if (id == _currentTrack) { _stopMusic(); _currentTrack = ''; }
+    }
     _updateMusic();
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_musicKey, id);
-    if (id.isNotEmpty) await prefs.setString(_lastTrackKey, id);
+    await prefs.setStringList(_enabledKey, _enabledMusic.toList());
+  }
+
+  /// Quick music on/off (the pause-menu toggle), separate from the enabled set.
+  Future<void> setMusicOn(bool on) async {
+    _musicOn = on;
+    _updateMusic();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_musicOnKey, on);
   }
 
   Future<void> setMusicVolume(double v) async {
@@ -249,11 +266,38 @@ class AudioService with WidgetsBindingObserver {
     await prefs.setDouble(_musicVolKey, _musicVolume);
   }
 
-  /// Start or stop the loop to match the current state: a track is chosen, a
-  /// music context is active, audio isn't muted, and the app is foregrounded.
+  Future<void> setSfxVolume(double v) async {
+    _sfxVolume = v.clamp(0.0, 1.0);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble(_sfxVolKey, _sfxVolume);
+  }
+
+  /// Rotate to a different random enabled track — called on each level-up. No-op
+  /// unless music is already playing and ≥2 tracks are enabled.
+  void nextTrack() {
+    if (_musicHandle == null || _enabledMusic.length < 2) return;
+    final next = _pickTrack();
+    if (next.isEmpty || next == _currentTrack) return;
+    _currentTrack = next;
+    _stopMusic();          // fade the old out…
+    _startMusic();         // …and the new in (uses _currentTrack)
+  }
+
+  /// A random enabled track id, preferring one different from the current.
+  String _pickTrack() {
+    final pool = _enabledMusic.toList();
+    if (pool.isEmpty) return '';
+    final others = pool.where((t) => t != _currentTrack).toList();
+    final pick = others.isEmpty ? pool : others;
+    return pick[_rng.nextInt(pick.length)];
+  }
+
+  bool get _musicShouldPlay => _ready && !_muted && !_backgrounded &&
+      _musicOn && _musicContext && _enabledMusic.isNotEmpty;
+
+  /// Start or stop the loop to match the current state.
   void _updateMusic() {
-    if (_ready && !_muted && !_backgrounded &&
-        _musicContext && _musicTrack.isNotEmpty) {
+    if (_musicShouldPlay) {
       _startMusic();
     } else {
       _stopMusic();
@@ -261,17 +305,19 @@ class AudioService with WidgetsBindingObserver {
   }
 
   Future<void> _startMusic() async {
-    if (_musicHandle != null || _musicStarting) return;
-    if (!_ready || _muted || _backgrounded ||
-        !_musicContext || _musicTrack.isEmpty) {
-      return;
+    if (_musicHandle != null || _musicStarting || !_musicShouldPlay) return;
+    // Keep the current track if it's still enabled, else pick a fresh one.
+    if (_currentTrack.isEmpty || !_enabledMusic.contains(_currentTrack)) {
+      _currentTrack = _pickTrack();
     }
+    final id = _currentTrack;
+    if (id.isEmpty) return;
     _musicStarting = true;
-    final src = await _ensureTrack(_musicTrack);
+    final src = await _ensureTrack(id);
     _musicStarting = false;
     // Conditions may have changed during the async synth — re-check before play.
-    if (src == null || _musicHandle != null || !_ready || _muted ||
-        _backgrounded || !_musicContext || _musicTrack.isEmpty) {
+    if (src == null || _musicHandle != null || !_musicShouldPlay ||
+        !_enabledMusic.contains(id)) {
       return;
     }
     final h = _soloud.play(src, volume: 0, looping: true);
