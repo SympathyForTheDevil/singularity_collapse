@@ -175,15 +175,17 @@ class _PuzzleScreenState extends State<PuzzleScreen>
   static const double _kEntHint     = 0.05;  // TUNE — per hint
   static const double _kEntSolution = 0.20;  // TUNE — per solution peek
 
-  /// Per-difficulty entropy tuning (all // TUNE). Easy is very forgiving — a slow
-  /// passive tick, a small step, a big solve-vent and cheap backtracks — so it
-  /// stays gentle well past level 5; Hard is tight. Depth gently shortens the tick.
+  /// Per-difficulty entropy tuning (all // TUNE). The **vent is a relief, not a
+  /// reset** — smaller than a typical board's passive rise — so entropy gently
+  /// *creeps up* over a run (you survive as long as you can, then heat-death). Easy
+  /// stays forgiving: clean, fast solves keep it low, but a slow/messy or deep run
+  /// drifts into the warning bands. Hard climbs fast. Depth shortens the tick.
   ({int tick, double step, double vent, double backtrack}) _ent() {
     final (int baseTick, int floor, double step, double vent, double back) =
       switch (widget.difficulty) {
-        RunDifficulty.easy   => (18, 11, 0.032, 0.36, 0.025),
-        RunDifficulty.medium => (12, 7,  0.048, 0.30, 0.040),
-        RunDifficulty.hard   => (8,  4,  0.062, 0.26, 0.050),
+        RunDifficulty.easy   => (14, 9, 0.036, 0.10, 0.028),
+        RunDifficulty.medium => (10, 6, 0.048, 0.14, 0.040),
+        RunDifficulty.hard   => (7,  4, 0.062, 0.16, 0.050),
       };
     return (tick: max(floor, baseTick - level ~/ 7),     // slow depth-tightening
             step: step, vent: vent, backtrack: back);
@@ -279,8 +281,8 @@ class _PuzzleScreenState extends State<PuzzleScreen>
       });
     _newPuzzle();
     _loadSeen();
-    AudioService.instance.startAmbient(calm: !_timed);
     AudioService.instance.enterMusicContext();   // soundtrack plays in-game only
+    // (the ambient hum is app-wide now — started at launch, not per screen)
   }
 
   Future<void> _loadSeen() async {
@@ -324,8 +326,8 @@ class _PuzzleScreenState extends State<PuzzleScreen>
 
   @override
   void dispose() {
-    AudioService.instance.stopAmbient();
     AudioService.instance.exitMusicContext();   // stop the soundtrack on the menu
+    // (ambient hum keeps playing — it's app-wide)
     _timer?.cancel();
     _hintTimer?.cancel();
     _hintCellsTimer?.cancel();
@@ -814,11 +816,7 @@ class _PuzzleScreenState extends State<PuzzleScreen>
     if (solved) return;
     AudioService.instance.ui();
     setState(() => _paused = !_paused);
-    if (_paused) {
-      AudioService.instance.stopAmbient();
-    } else {
-      AudioService.instance.startAmbient(calm: !_timed);
-    }
+    // Ambient hum + music keep playing while paused (MUSIC OFF in the menu stops it).
   }
 
   Future<void> _toggleMute() async {

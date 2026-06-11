@@ -106,9 +106,12 @@ through a global Freeverb send for a cosmic space:
   ~0.8s → inharmonic shimmer tail) synced to the 2 s collapse animation. This is
   the designed "impact one-shot" slot: to swap in a produced sample, drop a file
   in `assets/audio/` and load it in `_buildSounds` via `_soloud.loadAsset(...)`.
-- **Ambient pad** — seamless 8 s loop (all partials loop-locked to 1/dur), faded
-  in per screen; calmer when untimed (`calm: !_timed`, e.g. a RELAXED Quantum run).
-  Started in `PuzzleScreen.initState`, stopped in `dispose`.
+- **Ambient pad** — a seamless 8 s low cosmic hum (all partials loop-locked to
+  1/dur). **App-wide:** `startAmbient()` is called once from `AudioService.init()`
+  (and on unmute) and runs everywhere — the **main menu** and all gameplay — at a
+  fixed `_padTarget` (0.30), ducked to half under any active soundtrack. It's
+  `setPause`d (not stopped) when backgrounded, and stopped only by mute. Screens no
+  longer start/stop it (it's not per-`PuzzleScreen` anymore).
 - **Bridge** (`bridge()`) — deep rising sweep into a bright emergence chord, for a
   multiverse bridge crossing (distinct from the wormhole `warp()`).
 - **Mute** — toggle on the home screen, persisted via `shared_preferences`
@@ -244,9 +247,13 @@ is the fail state. It **rises** on a passive interval tick and on mistakes
 skill); **solving vents it** and **scores** the board (`base + level + clean + speed`,
 × difficulty multiplier 1.0/1.3/1.7). Fill the bar mid-board → **HEAT DEATH** overlay
 (score + best + NEW RUN). All magnitudes live in **`_ent()`** — a single per-difficulty
-record `(tick, step, vent, backtrack)`, all `// TUNE`: **Easy** is very forgiving
-(18 s tick · 0.032 step · 0.36 vent · 0.025 backtrack — stays gentle past level 5),
-**Medium** (12 / 0.048 / 0.30 / 0.040), **Hard** tight (8 / 0.062 / 0.26 / 0.050). Depth
+record `(tick, step, vent, backtrack)`, all `// TUNE`. The **vent is a relief, not a
+reset** (smaller than a board's typical passive rise), so entropy **gently creeps up**
+over a run — it's a survival clock, and the yellow/red audio cues are actually
+reachable (an earlier over-large vent kept the bar near 0, so the cues never fired).
+**Easy** stays forgiving — clean fast solves keep it low, slow/deep play drifts up
+(14 s tick · 0.036 step · 0.10 vent · 0.028 backtrack); **Medium** (10 / 0.048 / 0.14 /
+0.040) creeps with normal play; **Hard** climbs fast (7 / 0.062 / 0.16 / 0.050). Depth
 gently shortens the tick (`baseTick − level~/7`, floored). Hint/solution costs are the
 globals `_kEntHint`/`_kEntSolution`.
 **Difficulty unlock ladder:** Easy is always open; **Medium unlocks at Easy Lv 16**,

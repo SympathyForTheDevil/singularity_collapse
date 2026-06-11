@@ -84,7 +84,7 @@ class AudioService with WidgetsBindingObserver {
   bool   _musicOn      = true;     // quick on/off (pause-menu toggle)
   double _musicVolume  = 0.7;      // 0..1
   double _sfxVolume    = 0.9;      // 0..1 (applied to every sound effect)
-  double _padTarget    = 0;        // current ambient-pad fade target (for ducking)
+  final double _padTarget = 0.30;  // app-wide ambient-hum level (ducked under music)
   static const _enabledKey  = 'music_enabled';
   static const _musicOnKey  = 'music_on';
   static const _musicVolKey = 'music_volume';
@@ -127,6 +127,7 @@ class AudioService with WidgetsBindingObserver {
 
       await _buildSounds();
       _ready = true;
+      startAmbient();   // the low cosmic hum plays app-wide, from the menu onward
       // Music starts only when a game/settings screen calls enterMusicContext().
     } catch (e) {
       debugPrint('Audio: init failed, continuing silently ($e)');
@@ -136,7 +137,7 @@ class AudioService with WidgetsBindingObserver {
 
   Future<void> setMuted(bool value) async {
     _muted = value;
-    if (value) stopAmbient();
+    if (value) { stopAmbient(); } else { startAmbient(); }
     _updateMusic();
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_muteKey, value);
@@ -220,14 +221,17 @@ class AudioService with WidgetsBindingObserver {
     _soloud.play(_entDanger!, volume: 0.6 * _sfxVolume);
   }
 
-  // ── Ambient bed ────────────────────────────────────────────────────────────
-  Future<void> startAmbient({bool calm = false}) async {
-    if (!_ready || _muted || _pad == null || _padHandle != null) return;
-    _padTarget = calm ? 0.42 : 0.28;
+  // ── Ambient bed (a low cosmic hum, app-wide: menu + gameplay) ────────────────
+  /// Start the ambient hum. Idempotent — called at launch and on unmute; the hum
+  /// then runs everywhere (paused only when backgrounded or muted), ducked under
+  /// any active soundtrack.
+  void startAmbient() {
+    if (!_ready || _muted || _backgrounded || _pad == null || _padHandle != null) {
+      return;
+    }
     final h = _soloud.play(_pad!, volume: 0, looping: true);
     _padHandle = h;
     _soloud.setProtectVoice(h, true);
-    // Duck the pad under any active soundtrack so the melody reads on top.
     final target = _musicHandle != null ? _padTarget * 0.5 : _padTarget;
     _soloud.fadeVolume(h, target, const Duration(milliseconds: 1800));
   }
