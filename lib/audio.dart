@@ -65,6 +65,8 @@ class AudioService with WidgetsBindingObserver {
   AudioSource? _sling;
   AudioSource? _measure;
   AudioSource? _bridge;
+  AudioSource? _entWarn;     // entropy crossed into the yellow band
+  AudioSource? _entDanger;   // entropy crossed into the red band
   AudioSource? _pad;
   SoundHandle? _padHandle;
 
@@ -203,6 +205,18 @@ class AudioService with WidgetsBindingObserver {
   void bridge() {
     if (!_ready || _muted || _bridge == null) return;
     _soloud.play(_bridge!, volume: 0.55 * _sfxVolume);
+  }
+
+  /// Entropy just crossed into the yellow band (~50%) — a soft two-note "careful".
+  void entropyWarn() {
+    if (!_ready || _muted || _entWarn == null) return;
+    _soloud.play(_entWarn!, volume: 0.5 * _sfxVolume);
+  }
+
+  /// Entropy just crossed into the red band (~80%) — a low, tense pulse.
+  void entropyDanger() {
+    if (!_ready || _muted || _entDanger == null) return;
+    _soloud.play(_entDanger!, volume: 0.6 * _sfxVolume);
   }
 
   // ── Ambient bed ────────────────────────────────────────────────────────────
@@ -396,6 +410,8 @@ class AudioService with WidgetsBindingObserver {
     _sling    = await _load('sling',    _slingSweep());
     _measure  = await _load('measure',  _measureChime());
     _bridge   = await _load('bridge',   _bridgeWhoosh());
+    _entWarn  = await _load('entwarn',  _warnTone());
+    _entDanger= await _load('entdanger',_dangerTone());
     _collapse = await _load('collapse', _collapseStinger());
     _pad      = await _load('pad',      _padLoop(8.0));
   }
@@ -530,6 +546,37 @@ class AudioService with WidgetsBindingObserver {
       if (t > 0.06) s += sin(2 * pi * 392.0 * (t - 0.06)) * exp(-(t - 0.06) * 6) * 0.30;
       if (t > 0.16) s += sin(2 * pi * 587.33 * (t - 0.16)) * exp(-(t - 0.16) * 6) * 0.35;
       out[i] = s * 0.5;
+    }
+    return out;
+  }
+
+  /// Entropy warning (yellow): two soft ascending blips — gentle "careful".
+  Float64List _warnTone() {
+    const durSec = 0.32;
+    final out = _alloc(durSec);
+    for (var i = 0; i < out.length; i++) {
+      final t = i / _sr;
+      var s = 0.0;
+      if (t < 0.13) s += sin(2 * pi * 660 * t) * exp(-t * 18);     // blip 1
+      final d = t - 0.15;
+      if (d >= 0) s += sin(2 * pi * 880 * d) * exp(-d * 18);       // blip 2
+      out[i] = s * 0.30;
+    }
+    return out;
+  }
+
+  /// Entropy danger (red): a low, sour, pulsing tone — tense but brief.
+  Float64List _dangerTone() {
+    const durSec = 0.5;
+    final out = _alloc(durSec);
+    for (var i = 0; i < out.length; i++) {
+      final t = i / _sr;
+      final trem = 0.55 + 0.45 * sin(2 * pi * 11 * t);   // pulsing
+      final env  = exp(-t * 4.5) * trem;
+      final s = sin(2 * pi * 196 * t)                    // G3
+              + 0.8 * sin(2 * pi * 208 * t)              // beating (sour)
+              + 0.4 * sin(2 * pi * 98 * t);              // sub
+      out[i] = s * env * 0.16;
     }
     return out;
   }

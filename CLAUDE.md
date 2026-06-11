@@ -253,6 +253,12 @@ recorded each level-advance in `_newPuzzle`); the home chips lock/grey according
 show the next-unlock hint, and fall back to Easy if a remembered locked tier is chosen.
 Best score is per-difficulty (`ProgressService.bestEntropy/recordEntropy`). Daily &
 Quantum have **no** entropy.
+**HUD bar & cues:** `_entropyBar()` is a prominent 300×18 meter that glows/breathes
+(via `_pulse`) once in the yellow/red band and flips its label to "HEAT DEATH" with a
+warning icon at ≥80%. All entropy changes go through **`_setEntropy()`**, which fires a
+one-shot audio cue when the meter *crosses up* a band — `AudioService.entropyWarn()`
+(soft two blips, ~50%) / `entropyDanger()` (low sour pulse, ~80%) — tracked by
+`_entBand`; venting back down re-arms them.
 
 **Daily meta-progression.**
 - **Badges** (`ProgressService`, per-day bitmask) — collectible per-solve achievements:

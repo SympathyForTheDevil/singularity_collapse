@@ -196,9 +196,27 @@ class _PuzzleScreenState extends State<PuzzleScreen>
     RunDifficulty.easy => 1.0, RunDifficulty.medium => 1.3, RunDifficulty.hard => 1.7,
   };
 
+  int _entBand = 0;          // 0 calm · 1 yellow · 2 red — for the threshold cues
+
   void _addEntropy(double d) {
     if (!_isEntropy || _runOver) return;
-    _entropy = (_entropy + d).clamp(0.0, 1.0);   // game-over is checked in the timer
+    _setEntropy(_entropy + d);
+  }
+
+  /// Set the entropy meter and fire a one-shot audio cue when it *crosses up*
+  /// into the yellow (≥50%) or red (≥80%) band. Game-over is checked in the timer.
+  void _setEntropy(double v) {
+    final nv = v.clamp(0.0, 1.0);
+    final band = nv < 0.5 ? 0 : nv < 0.8 ? 1 : 2;
+    if (band > _entBand && !_runOver) {
+      if (band == 1) {
+        AudioService.instance.entropyWarn();
+      } else {
+        AudioService.instance.entropyDanger();
+      }
+    }
+    _entBand = band;
+    _entropy = nv;
   }
   /// Whether the timer is shown/relevant: always in Daily/Infinity; in Quantum
   /// only when the player chose a timed session.
@@ -252,7 +270,7 @@ class _PuzzleScreenState extends State<PuzzleScreen>
               final clean = !_backtracked && !_peeked;
               final raw = 50 + level * 15 + (clean ? 40 : 0) + max(0, 45 - _seconds);
               _runScore += (raw * _scoreMult()).round();
-              _entropy = (_entropy - _ent().vent).clamp(0.0, 1.0);
+              _setEntropy(_entropy - _ent().vent);
             }
             _newPuzzle(advance: true);
           }
@@ -330,7 +348,7 @@ class _PuzzleScreenState extends State<PuzzleScreen>
       final s = _seconds + 1;
       // Passive entropy ticks up once every _entropyTick() seconds.
       if (_isEntropy && s % _entropyTick() == 0) {
-        _entropy = (_entropy + _ent().step).clamp(0.0, 1.0);
+        _setEntropy(_entropy + _ent().step);
       }
       setState(() => _seconds = s);
       if (_isEntropy && _entropy >= 1.0) _triggerGameOver();
@@ -348,7 +366,7 @@ class _PuzzleScreenState extends State<PuzzleScreen>
   void _restartRun() {
     AudioService.instance.ui();
     level = 1; solvedCount = 0;
-    _runScore = 0; _entropy = 0; _runOver = false;
+    _runScore = 0; _entropy = 0; _entBand = 0; _runOver = false;
     _newPuzzle();
   }
 
@@ -1286,41 +1304,67 @@ class _PuzzleScreenState extends State<PuzzleScreen>
     final col = e < 0.5 ? const Color(0xff37e0d0)
               : e < 0.8 ? const Color(0xffffc24d)
               : const Color(0xffff4466);
-    return SizedBox(
-      width: 232,
-      child: Column(children: [
-        Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-          const Text('ENTROPY', style: TextStyle(
-            color: Color(0xff5a7488), fontSize: 9,
-            fontFamily: 'monospace', letterSpacing: 2)),
-          Text('${(e * 100).round()}%', style: TextStyle(
-            color: col, fontSize: 9, fontFamily: 'monospace',
-            letterSpacing: 1, fontWeight: FontWeight.bold)),
-        ]),
-        const SizedBox(height: 4),
-        Container(
-          height: 9,
-          decoration: BoxDecoration(
-            color: const Color(0xff0e1c28),
-            borderRadius: BorderRadius.circular(5),
-            border: Border.all(color: const Color(0xff1c2e3c), width: 1)),
-          child: TweenAnimationBuilder<double>(
-            tween: Tween(end: e <= 0 ? 0.0 : e),
-            duration: const Duration(milliseconds: 700),
-            curve: Curves.easeOut,
-            builder: (_, v, _) => FractionallySizedBox(
-              alignment: Alignment.centerLeft,
-              widthFactor: v,
-              child: Container(decoration: BoxDecoration(
-                color: col,
-                borderRadius: BorderRadius.circular(5),
-                boxShadow: e > 0.7
-                  ? [BoxShadow(color: col.withValues(alpha: 0.7), blurRadius: 8)]
-                  : null)),
+    final hot = e >= 0.8;
+    return AnimatedBuilder(
+      animation: _pulse,
+      builder: (_, _) {
+        // Breathe the glow once the meter reaches the yellow/red bands.
+        final beat = sin(_pulse.value * 2 * pi) * 0.5 + 0.5;
+        final glow = e < 0.5 ? 0.0
+            : (hot ? 0.45 : 0.22) + beat * (hot ? 0.45 : 0.18);
+        return SizedBox(
+          width: 300,
+          child: Column(children: [
+            Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+              Row(children: [
+                Icon(hot ? Icons.warning_amber_rounded : Icons.bolt_rounded,
+                  color: col, size: 15),
+                const SizedBox(width: 5),
+                Text(hot ? 'HEAT DEATH' : 'ENTROPY',
+                  style: TextStyle(
+                    color: col, fontSize: 11, fontFamily: 'monospace',
+                    letterSpacing: 2, fontWeight: FontWeight.bold)),
+              ]),
+              Text('${(e * 100).round()}%',
+                style: TextStyle(
+                  color: col, fontSize: 15, fontFamily: 'monospace',
+                  letterSpacing: 1, fontWeight: FontWeight.bold,
+                  shadows: glow > 0
+                    ? [Shadow(color: col.withValues(alpha: glow), blurRadius: 8)]
+                    : null)),
+            ]),
+            const SizedBox(height: 6),
+            Container(
+              height: 18,
+              decoration: BoxDecoration(
+                color: const Color(0xff0e1c28),
+                borderRadius: BorderRadius.circular(9),
+                border: Border.all(
+                  color: col.withValues(alpha: 0.3 + glow * 0.6), width: 1.5),
+                boxShadow: glow > 0
+                  ? [BoxShadow(color: col.withValues(alpha: glow),
+                      blurRadius: 12 + beat * 8, spreadRadius: 1)]
+                  : null,
+              ),
+              child: TweenAnimationBuilder<double>(
+                tween: Tween(end: e <= 0 ? 0.0 : e),
+                duration: const Duration(milliseconds: 600),
+                curve: Curves.easeOut,
+                builder: (_, v, _) => FractionallySizedBox(
+                  alignment: Alignment.centerLeft,
+                  widthFactor: v,
+                  child: Container(decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [col.withValues(alpha: 0.7), col]),
+                    borderRadius: BorderRadius.circular(9),
+                    boxShadow: [BoxShadow(
+                      color: col.withValues(alpha: 0.55), blurRadius: 8)])),
+                ),
+              ),
             ),
-          ),
-        ),
-      ]),
+          ]),
+        );
+      },
     );
   }
 
