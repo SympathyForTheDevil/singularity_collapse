@@ -304,6 +304,7 @@ class _PuzzleScreenState extends State<PuzzleScreen>
       'seen_entangled'=> grid.hasQuantum,
       'seen_multiverse'=> grid.hasMultiverse,
       'seen_entropy'  => _isEntropy,                 // mode explainer, any board
+      'seen_syntropy' => _isQuantum,                 // first time in Syntropy mode
       _               => false,
     };
     for (final card in kTutorialCards) {

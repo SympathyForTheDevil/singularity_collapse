@@ -19,7 +19,7 @@ class GuideEntry {
 class GuideService {
   static const keys = [
     'seen_core', 'seen_wormhole', 'seen_gate', 'seen_well', 'seen_entangled',
-    'seen_multiverse', 'seen_entropy',
+    'seen_multiverse', 'seen_entropy', 'seen_syntropy',
   ];
 
   static Future<Set<String>> seen() async {
@@ -97,6 +97,11 @@ const List<GuideEntry> kTutorialCards = [
     'most). Let the bar fill and the region suffers HEAT DEATH and the run ends. '
     'Go deep; reach Lv 16 to unlock the next difficulty.',
     'seen_entropy', 1),
+  GuideEntry('syntropy', 'SYNTROPY MODE',
+    'Order from disorder — your custom playground. No entropy, no fail state: just '
+    'the worldline, at your own pace. You picked which game types appear (and timed '
+    'or relaxed) on the way in — change them anytime from the setup screen.',
+    'seen_syntropy', 1),
   GuideEntry('wormhole', 'WORMHOLE',
     'Two linked portals. Enter one and your line emerges from its twin — you '
     'can\'t walk through a portal without taking the jump.',
@@ -186,6 +191,22 @@ class _GuideIconPainter extends CustomPainter {
           ..lineTo(u * 0.37, u * 0.38)
           ..close();
         canvas.drawPath(arrow, Paint()..color = _gold);
+      case 'syntropy':
+        // The mirror of entropy: a calm, low meter under a downward (settling) arrow.
+        final strack = RRect.fromRectAndRadius(
+          Rect.fromLTWH(u * 0.16, u * 0.42, u * 0.68, u * 0.16),
+          Radius.circular(u * 0.08));
+        canvas.drawRRect(strack, Paint()..color = const Color(0xff1c2e3c));
+        final sfill = RRect.fromRectAndRadius(
+          Rect.fromLTWH(u * 0.16, u * 0.42, u * 0.68 * 0.26, u * 0.16),
+          Radius.circular(u * 0.08));
+        canvas.drawRRect(sfill, Paint()..color = _portal);
+        final sarrow = Path()
+          ..moveTo(u * 0.5, u * 0.84)
+          ..lineTo(u * 0.63, u * 0.62)
+          ..lineTo(u * 0.37, u * 0.62)
+          ..close();
+        canvas.drawPath(sarrow, Paint()..color = _purple);
       case 'wormhole':
         for (final dx in [-u * 0.2, u * 0.2]) {
           canvas.drawCircle(c + Offset(dx, 0), u * 0.16, Paint()

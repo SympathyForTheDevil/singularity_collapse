@@ -283,14 +283,14 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                     Text('A Hamiltonian Path to the Singularity',
                       textAlign: TextAlign.center,
                       style: TextStyle(
-                        color: _gold.withValues(alpha: 0.5), fontSize: 10.5,
+                        color: _gold.withValues(alpha: 0.82), fontSize: 12.5,
                         fontFamily: 'monospace', fontStyle: FontStyle.italic,
-                        letterSpacing: 1)),
-                    const SizedBox(height: 5),
+                        letterSpacing: 0.5)),
+                    const SizedBox(height: 6),
                     Text(arxiv,
                       textAlign: TextAlign.center,
                       style: const TextStyle(
-                        color: Color(0xff3a526a), fontSize: 8.5,
+                        color: Color(0xff6c89a4), fontSize: 10,
                         fontFamily: 'monospace', letterSpacing: 1)),
 
                     const SizedBox(height: 40),
@@ -369,15 +369,15 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                         Text(line,
                           style: TextStyle(
                             color: hasRuns
-                              ? const Color(0xff8aa6bc) : const Color(0xff44607a),
-                            fontSize: 10, fontFamily: 'monospace', letterSpacing: 2,
+                              ? const Color(0xff9fbdd2) : const Color(0xff6c89a4),
+                            fontSize: 11, fontFamily: 'monospace', letterSpacing: 2,
                             fontWeight: hasRuns ? FontWeight.bold : FontWeight.normal)),
                         if (lock != null) ...[
                           const SizedBox(height: 4),
                           Text(lock,
                             style: const TextStyle(
-                              color: Color(0xff44607a), fontSize: 8.5,
-                              fontFamily: 'monospace', letterSpacing: 1.5)),
+                              color: Color(0xff6c89a4), fontSize: 10,
+                              fontFamily: 'monospace', letterSpacing: 1)),
                         ],
                       ]);
                     }),
@@ -398,7 +398,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
               'drag one path · consume objects in order · fill every cell',
               textAlign: TextAlign.center,
               style: TextStyle(
-                color: Color(0xff3a526a), fontSize: 9,
+                color: Color(0xff6c89a4), fontSize: 10.5,
                 fontFamily: 'monospace', letterSpacing: 1)),
             const SizedBox(height: 8),
             // Dev/test launcher (discreet; remove before release).

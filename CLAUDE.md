@@ -174,15 +174,16 @@ so a filter hiccup never costs the dry audio.
 
 **Tutorial & Field Guide (`lib/field_guide.dart`).** First-encounter teaching:
 the first time the player meets the Core, a Wormhole, a Mass Gate, a Gravity Well,
-an Entangled Pair, or a Multiverse — **and on the first Entropy board** (a mode
-explainer: `seen_entropy`, predicate `_isEntropy`, shown right after the worldline
-card) — `PuzzleScreen` shows a one-time modal card (`_buildTutorialCard`, queued in
-`_cards`) over the dimmed board; "GOT IT" dismisses and marks it seen. State is
-persisted via `GuideService` (`seen_core/_wormhole/_gate/_well/_entangled/
-_multiverse/_entropy`) — the mechanic flags drive the **Field
-Guide** (`FieldGuideScreen`, book icon top-left on Home): every concept/object is
-listed, but un-encountered entries are blacked out showing "UNLOCKS AT LEVEL X"
-(the mechanic's skill-gate level; `seen_entropy` is card-only, not a guide entry).
+an Entangled Pair, or a Multiverse — **and on the first Entropy board**
+(`seen_entropy`, predicate `_isEntropy`) **and the first Syntropy board**
+(`seen_syntropy`, predicate `_isQuantum`), the two mode explainers — `PuzzleScreen`
+shows a one-time modal card (`_buildTutorialCard`, queued in `_cards`) over the
+dimmed board; "GOT IT" dismisses and marks it seen. State is persisted via
+`GuideService` (`seen_core/_wormhole/_gate/_well/_entangled/_multiverse/_entropy/
+_syntropy`) — the mechanic flags drive the **Field Guide** (`FieldGuideScreen`, book
+icon top-left on Home): every concept/object is listed, but un-encountered entries
+are blacked out showing "UNLOCKS AT LEVEL X" (the mechanic's skill-gate level; the
+`seen_entropy`/`seen_syntropy` mode cards are card-only, not guide entries).
 **Onboarding gate:** Daily & Syntropy are **locked on Home** ("PLAY ENTROPY FIRST")
 until `seen_core && seen_entropy` — i.e. the player has played Entropy once and
 dismissed the worldline + entropy cards (`_onboarded` in `home_screen`). To add a
