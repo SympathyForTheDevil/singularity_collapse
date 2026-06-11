@@ -28,7 +28,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   RunDifficulty _entropyDiff = RunDifficulty.medium;
   Map<RunDifficulty, int> _entropyBest = const {};
   Map<RunDifficulty, int> _maxLevel    = const {};
-  bool _onboarded = false;   // played Entropy + seen the timeline/entropy cards
+  bool _onboarded = false;   // played Entropy + seen the worldline/entropy cards
   static const int _kUnlockLevel = 16;   // reach this on a tier to unlock the next
 
   late final AnimationController _pulse;
@@ -67,7 +67,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         d: await ProgressService.bestLevel(d.name),
     };
     // Daily & Syntropy stay locked until the player has played Entropy once and
-    // dismissed the timeline + entropy tutorial cards.
+    // dismissed the worldline + entropy tutorial cards.
     final seen = await GuideService.seen();
     final onboarded =
         seen.contains('seen_core') && seen.contains('seen_entropy');
@@ -333,7 +333,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
 
                     // Daily button (locked until the player has played Entropy)
                     _menuBtn(
-                      _solvedToday ? 'ALREADY COLLAPSED' : 'TODAY\'S REGION',
+                      _solvedToday ? 'ALREADY COLLAPSED' : 'TODAY\'S WORLDLINE',
                       subtitle: _onboarded ? today : 'PLAY ENTROPY FIRST',
                       color: (_onboarded && !_solvedToday)
                         ? _gold : const Color(0xff334455),

@@ -35,7 +35,7 @@ class GuideService {
 
 /// Full Field Guide listing (richer than the tutorial cards).
 const List<GuideEntry> kGuideEntries = [
-  GuideEntry('worldline', 'The Timeline',
+  GuideEntry('worldline', 'Worldline',
     'Drag ONE continuous line. It can never cross itself or revisit a cell. '
     'Fill every cell of the region to complete it.',
     'seen_core', 1),
@@ -49,7 +49,7 @@ const List<GuideEntry> kGuideEntries = [
     'seen_core', 1),
   GuideEntry('wormhole', 'Bi-directional Wormhole',
     'Two linked portals you can cross in EITHER direction — enter one and your '
-    'timeline emerges from its twin (you cannot pass through without taking the '
+    'worldline emerges from its twin (you cannot pass through without taking the '
     'jump). Appears within a region, and as a two-way bridge between universes.',
     'seen_wormhole', kWormholeLevel),
   GuideEntry('gate', 'Mass Gate',
@@ -61,7 +61,7 @@ const List<GuideEntry> kGuideEntries = [
     'route, so plan a detour to grab it before the gate.',
     'seen_gate', kMassGateLevel),
   GuideEntry('well', 'Gravity Well',
-    'Step onto it and your timeline is flung a fixed direction — no choice. Set '
+    'Step onto it and your worldline is flung a fixed direction — no choice. Set '
     'up your approach so the launch lands where you need.',
     'seen_well', kGravityWellLevel),
   GuideEntry('entangled', 'Entangled Pair',
@@ -87,7 +87,7 @@ const List<GuideEntry> kGuideEntries = [
 
 /// The four first-encounter teaching cards (Core + the three mechanics).
 const List<GuideEntry> kTutorialCards = [
-  GuideEntry('worldline', 'THE TIMELINE',
+  GuideEntry('worldline', 'WORLDLINE',
     'Drag one continuous line. Consume cosmic objects in ascending mass order, '
     'fill every cell, and finish on the Black Hole to collapse the region.',
     'seen_core', 1),
