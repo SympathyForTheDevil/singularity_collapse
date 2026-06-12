@@ -459,8 +459,8 @@ All four additive mechanics are implemented and dev-menu testable:
 | Entangled pair | 13 (forced) then ~14%/lvl | `PuzzleFeature.entangled` | ✅ shipped, graduated |
 | Multiverse | 16 (forced 2-board) · 26 (forced 3-board) · then ~12%/lvl | `PuzzleFeature.multiverse` | ✅ shipped, graduated |
 
-**Multiverse (stacked boards + bridges)** — in progress. **Phases 1–2 shipped** (engine
-+ render/input/dev-menu; playable via dev menu → MULTIVERSE).
+**Multiverse (stacked boards + bridges)** — **complete** (built in the phases below).
+**Phases 1–2** (engine + render/input/dev-menu; playable via dev menu → MULTIVERSE).
 `PuzzleFeature.multiverse` (exclusive; graduated — `kMultiverseLevel`=16 forced 2-board,
 `kMultiverse3Level`=26 forced 3-board, then ~12%/level; also dev-menu forceable)
 generates **two stacked square boards** (5×5) woven by one continuous worldline that
@@ -518,24 +518,45 @@ escape/boss mode (not a normal-puzzle addon).
 
 ---
 
-## Current state & next steps  →  see `ROADMAP.md` and `DESCENT.md`
+## Current state & next steps  →  see `ROADMAP.md`, `LAUNCH.md`, `DESCENT.md`
 
-**`ROADMAP.md` is the source of truth** for what's done (✅/◐/☐) and next. Snapshot
-as of this writing:
+**`ROADMAP.md`** = what's done/next; **`LAUNCH.md`** = the store-deployment checklist
+(the **active track**); **`IOS_TESTFLIGHT.md`** = the Codemagic→TestFlight walkthrough;
+**`DESCENT.md`** = the deferred post-launch roguelike.
 
-- **Done:** all puzzle mechanics; Penrose skin; Quantum mode; app icon; **Phase 2
-  retention** (badges, StreakScreen, freezes); **Entropy mode** (high-score survival
-  with the entropy meter + Easy/Medium/Hard, per the `DESCENT.md` design); the HINT
-  button.
-- **Active big track — Descent roguelike (`DESCENT.md`):** the entropy core (Phase A)
-  shipped *as* Entropy mode. **Next = Phase B**: the Descent run skeleton (run-state +
-  a linear act → final boss + a map screen), then branching DAG + relics + boss
-  mechanics (Heat Death / Big Crunch / Kerr Spin / Final Singularity).
-- **Also pending:** **on-device tuning** — Entropy balance (the `kEntropy*` / tick
-  constants), multiverse length/difficulty, entangled frequency; **Phase 3
-  monetization** (`PremiumService` gating the Quantum picker / Penrose theme / HINT
-  count — all hooks exist); **Phase 4** progression-menu / unlock surfacing; the
-  **name decision** (store title) and gating/removing the `· dev ·` menu before release.
+**Decision: ship v1 first.** Descent Phase B+ is **deferred to a post-launch feature
+update**. Pre-launch focus = **monetization → polish → deploy** (progression already done).
+
+**Done (v1 feature set):** all puzzle mechanics + Penrose skin; the three modes —
+**Daily** (home "TODAY'S WORLDLINE"), **Entropy** (survival; gentle-creep tuning in
+`_ent()` + Medium/Hard unlock ladder at Lv 16 + reachable yellow/red warning cues +
+prominent HUD bar), **Syntropy** (display rename of `PuzzleMode.quantum`; customizable,
+no stakes); **Phase 2 retention** (badges, StreakScreen, freezes); **Phase 4** —
+unlock-celebration card + **Achievements screen** (🏆 on Home; `StatsService` lifetime
+counters; the mechanics-progression moved here, off the home menu); **onboarding**
+(Daily/Syntropy gated behind a first Entropy run; Entropy + Syntropy intro cards); the
+**guided HINT** (rewind-to-mistake + lock-to-correct-move); the **audio/Settings** layer
+(synthesized classical **music system** — 7 tracks + a Bach Toccata techno engine,
+per-song random rotation, separate SFX/music volumes, app-wide menu hum) + an
+**About/credits** panel (version · developer · website/support/privacy links · OSS
+licenses); the **app icon**.
+
+**Before launch (tracked in `LAUNCH.md`):**
+- ✅ **Store name** = **"Singularity: Collapse"** (clear on both stores;
+  `singularitycollapse.com` registered). In-app wordmark stays "SINGULARITY".
+- ☐ **Monetization (Phase 3)** — model = **free + rewarded ads (AdMob) + a Premium /
+  Remove-Ads IAP**; `PremiumService` + IAP/ads plumbing **not built yet**. Ads add
+  privacy-disclosure work (ATT, UMP consent, data-safety) — see LAUNCH.md.
+- ☐ **Website** — privacy + support pages must be **live** before ship (the in-app
+  About links point to `singularitycollapse.com` + `/privacy`).
+- ◐ **iOS testing** — Codemagic→TestFlight wired (`codemagic.yaml`, `IOS_TESTFLIGHT.md`,
+  `ITSAppUsesNonExemptEncryption=NO`); needs the App Store Connect **API key** + filling
+  the two yaml placeholders (key name `CodemagicAppStore`, numeric `APP_STORE_APPLE_ID`).
+- ☐ **Polish** — gate/remove the `· dev ·` menu for production; finish the **readability
+  pass** (Settings/Streak/Field Guide/in-game HUD/overlays — home done); switch the Play
+  artifact to **AAB**; on-device tuning confirmation (entropy feel, multiverse, entangled).
+- ⚠ **Open placeholder:** support email defaults to `support@singularitycollapse.com`
+  in `settings_screen.dart` — confirm/replace.
 
 **Android signing** — ✅ DONE. Keystore at `android/collapse-release.jks`
    (git-ignored). GitHub secrets set: KEYSTORE_BASE64, KEY_STORE_PASSWORD,

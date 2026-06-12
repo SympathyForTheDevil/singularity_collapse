@@ -23,10 +23,17 @@ Legend: ☐ todo · ◐ in progress · ✅ done
 ## Part 1 — Remaining development (gates the store builds)
 
 ### A. Pre-release polish
-- ☐ **Store name decision** (Phase 1). In-app wordmark stays "SINGULARITY"; pick the
-  *store title* — "Singularity: Collapse" recommended (the bare word is contested on
-  both stores → bad discoverability). Affects: Play listing title, App Store name,
-  `MaterialApp.title`, `android:label`, iOS `CFBundleDisplayName`. (App **IDs** stay.)
+- ✅ **Store name = "Singularity: Collapse"** (confirmed clear on both stores;
+  `singularitycollapse.com` registered). In-app wordmark stays "SINGULARITY". Code
+  display names aligned — `MaterialApp.title` = "Singularity: Collapse"; `android:label`
+  + iOS `CFBundleDisplayName` = "Singularity Collapse". Set the **listing title** in the
+  Play/App Store consoles at submission. (App **IDs** unchanged.)
+- ✅ **About/credits** in Settings — version · developer (Adam Ettinger) · website /
+  support / privacy links · **open-source licenses** (`showLicensePage` — satisfies the
+  OSS notice obligation). ⚠ support email is a placeholder (`support@singularitycollapse.com`).
+- ✅ **iOS TestFlight pipeline wired** — `codemagic.yaml` + `IOS_TESTFLIGHT.md` walkthrough,
+  `ITSAppUsesNonExemptEncryption=NO`. To run it: add the App Store Connect API key + fill
+  the 2 yaml placeholders (see `IOS_TESTFLIGHT.md`).
 - ☐ **Gate / remove the `· dev ·` menu** before any public/production build (keep it
   for internal/testing tracks behind a flag, or strip it for production).
 - ◐ **Readability pass** — home done; finish Settings / Streak / Field Guide / in-game
@@ -59,10 +66,12 @@ Legend: ☐ todo · ◐ in progress · ✅ done
   Transparency** prompt (`NSUserTrackingUsageDescription` + ATT flow) if ads
   personalize, and the **Google UMP / consent** flow for GDPR regions. Budget for this.
 
-### C. Progression menu (Phase 4)
-- ☐ Home-screen progression: current stage / solved count / next-unlock teaser
-  ("Wormholes at L4").
-- ☐ "NEW MECHANIC UNLOCKED" celebration beat (ties into the tutorial-card system).
+### C. Progression menu (Phase 4) — ✅ done
+- ✅ "✦ NEW MECHANIC UNLOCKED ✦" celebration card on first encounter of a mechanic.
+- ✅ **Achievements screen** (🏆 on Home) — ~14 achievements with progress bars +
+  the mechanics-discovered progression (moved *off* the cluttered home menu into this
+  submenu). `StatsService` tracks lifetime counters (`_onSolved`).
+- ☐ Optional later: an achievement-unlocked toast the moment one is earned.
 
 ---
 
