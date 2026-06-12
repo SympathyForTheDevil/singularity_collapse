@@ -1,0 +1,55 @@
+# Codemagic CI/CD — iOS build → sign → TestFlight, no Mac required.
+# Full setup walkthrough: see IOS_TESTFLIGHT.md
+#
+# Two placeholders you must set before the first build (both come from Apple,
+# see IOS_TESTFLIGHT.md steps 2–3):
+#   1. integrations.app_store_connect → the NAME you give the App Store Connect
+#      API key when you add it in Codemagic (Team settings → Integrations).
+#   2. APP_STORE_APPLE_ID → the numeric "Apple ID" on your app's App Information
+#      page in App Store Connect.
+
+workflows:
+  ios-testflight:
+    name: iOS · TestFlight
+    instance_type: mac_mini_m2          # Codemagic's macOS build machine
+    max_build_duration: 60
+    integrations:
+      app_store_connect: CodemagicAppStore   # ← match the key name you set in Codemagic
+    environment:
+      ios_signing:
+        distribution_type: app_store           # Codemagic auto-creates the cert + profile
+        bundle_identifier: com.sympathyforthedevil.singularityCollapse
+      vars:
+        APP_STORE_APPLE_ID: 0000000000         # ← your app's numeric Apple ID
+      flutter: stable
+      xcode: latest
+      cocoapods: default
+    # No auto-trigger by default — start builds manually from the Codemagic UI to
+    # conserve free build minutes. To auto-build on push to main, uncomment:
+    # triggering:
+    #   events: [push]
+    #   branch_patterns:
+    #     - pattern: main
+    #       include: true
+    scripts:
+      - name: Get Flutter packages
+        script: flutter pub get
+      - name: Install CocoaPods dependencies
+        script: find . -name "Podfile" -execdir pod install \;
+      - name: Apply the signing profiles to the Xcode project
+        script: xcode-project use-profiles
+      - name: Build the signed IPA (auto-incrementing the build number)
+        script: |
+          BUILD_NUMBER=$(($(app-store-connect get-latest-testflight-build-number "$APP_STORE_APPLE_ID") + 1))
+          flutter build ipa --release \
+            --build-number="$BUILD_NUMBER" \
+            --export-options-plist=/Users/builder/export_options.plist
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+    publishing:
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: true
+        # beta_groups:            # optional: also push to a named external tester group
+        #   - Internal Testers
