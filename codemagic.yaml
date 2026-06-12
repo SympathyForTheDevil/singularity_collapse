@@ -16,6 +16,8 @@ workflows:
     integrations:
       app_store_connect: CodemagicAppStore   # ← match the key name you set in Codemagic
     environment:
+      groups:
+        - appstore_credentials                 # CERTIFICATE_PRIVATE_KEY (secure var, set in Codemagic UI)
       vars:
         APP_STORE_APPLE_ID: 6779779848         # ← your app's numeric Apple ID
         BUNDLE_ID: com.sympathyforthedevil.singularityCollapse
@@ -34,15 +36,18 @@ workflows:
         script: flutter pub get
       - name: Install CocoaPods dependencies
         script: find . -name "Podfile" -execdir pod install \;
-      # Explicit automatic signing: on the first build of a brand-new app there is
-      # no certificate/profile yet, so --create makes Codemagic mint them via the
-      # App Store Connect API key (the implicit ios_signing block only *fetches*).
+      # Explicit automatic signing. A brand-new app has no certificate/profile yet,
+      # and --create cannot mint the FIRST distribution certificate without a private
+      # key to base it on. We supply our own persistent key (CERTIFICATE_PRIVATE_KEY,
+      # a secure Codemagic env var): --create mints the cert FROM that key on the
+      # first run and reuses the same cert on every later run (no certificate churn).
       - name: Set up the signing keychain
         script: keychain initialize
       - name: Fetch (and create on first run) the App Store signing files
         script: |
           app-store-connect fetch-signing-files "$BUNDLE_ID" \
             --type IOS_APP_STORE \
+            --certificate-key=@env:CERTIFICATE_PRIVATE_KEY \
             --create
       - name: Add the signing certificate to the keychain
         script: keychain add-certificates
