@@ -20,7 +20,7 @@ workflows:
         distribution_type: app_store           # Codemagic auto-creates the cert + profile
         bundle_identifier: com.sympathyforthedevil.singularityCollapse
       vars:
-        APP_STORE_APPLE_ID: 0000000000         # ← your app's numeric Apple ID
+        APP_STORE_APPLE_ID: 6779779848         # ← your app's numeric Apple ID
       flutter: stable
       xcode: latest
       cocoapods: default
