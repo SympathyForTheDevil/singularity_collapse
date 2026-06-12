@@ -257,8 +257,11 @@ reachable (an earlier over-large vent kept the bar near 0, so the cues never fir
 **Easy** stays forgiving — clean fast solves keep it low, slow/deep play drifts up
 (14 s tick · 0.036 step · 0.10 vent · 0.028 backtrack); **Medium** (10 / 0.048 / 0.14 /
 0.040) creeps with normal play; **Hard** climbs fast (7 / 0.062 / 0.16 / 0.050). Depth
-gently shortens the tick (`baseTick − level~/7`, floored). Hint/solution costs are the
-globals `_kEntHint`/`_kEntSolution`.
+gently shortens the tick (`baseTick − level~/7`, floored). **Assist (hint/solution)
+entropy cost is graduated** (also in `_ent()`, fields `hint`/`solution`): **Easy = 0/0
+(free)**, **Medium = 0.025/0.10 (half)**, **Hard = 0.05/0.20 (full)** — to keep help
+inviting where most players are (the ad/premium hint funnel), while the clean-bonus
+score loss still deters peeking on the leaderboard at every tier.
 **Difficulty unlock ladder:** Easy is always open; **Medium unlocks at Easy Lv 16**,
 **Hard at Medium Lv 16** (`_kUnlockLevel`=16). Max level reached per difficulty is
 tracked by `ProgressService.recordLevel`/`bestLevel` (`entropy_maxlevel_<diff>`,
@@ -457,13 +460,18 @@ All four additive mechanics are implemented and dev-menu testable:
 | Mass gates + bosons | ≥ 7 | `PuzzleFeature.massGate` | ✅ shipped |
 | Gravity wells | ≥ 10 | `PuzzleFeature.gravityWell` | ✅ shipped |
 | Entangled pair | 13 (forced) then ~14%/lvl | `PuzzleFeature.entangled` | ✅ shipped, graduated |
-| Multiverse | 16 (forced 2-board) · 26 (forced 3-board) · then ~12%/lvl | `PuzzleFeature.multiverse` | ✅ shipped, graduated |
+| Multiverse | **Medium+ only** (the showpiece) — Medium gate ≈ L8, Hard ≈ L5, Easy never; 3-board at 26 | `PuzzleFeature.multiverse` | ✅ shipped, graduated |
 
 **Multiverse (stacked boards + bridges)** — **complete** (built in the phases below).
 **Phases 1–2** (engine + render/input/dev-menu; playable via dev menu → MULTIVERSE).
-`PuzzleFeature.multiverse` (exclusive; graduated — `kMultiverseLevel`=16 forced 2-board,
-`kMultiverse3Level`=26 forced 3-board, then ~12%/level; also dev-menu forceable)
-generates **two stacked square boards** (5×5) woven by one continuous worldline that
+`PuzzleFeature.multiverse` (exclusive; also dev-menu forceable) is the **Medium+
+showpiece reveal**: `generate(multiverseGate:)` parameterizes the auto-gate (forced
+2-board at exactly that level, `kMultiverse3Level`=26 forced 3-board, then ~12%/level),
+and `_newPuzzle` passes it difficulty-scaled in Entropy — **Easy `1<<30` (never)**,
+**Medium ≈ 8**, **Hard ≈ 5**; Daily/Syntropy keep the default 16 (Syntropy is gated by
+`seen_multiverse` anyway, so first encounter only happens on Medium+, which then unlocks
+it in the picker + Field Guide — both of which now show "UNLOCKS ON MEDIUM").
+It generates **two stacked square boards** (5×5) woven by one continuous worldline that
 crosses **bridges** between them. `PuzzleGrid` is now N-board-general: cell index =
 `board*size² + local`; `boardOf/rowOf/colOf` are board-aware, `adjacent` requires the
 same board, `cellCount = size²·boardCount`. A `Bridge(a, b, oneWay)` is a cross-board

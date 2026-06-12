@@ -174,23 +174,23 @@ class _PuzzleScreenState extends State<PuzzleScreen>
   int    _runScore  = 0;     // accrues per board solved this run
   int    _bestScore = 0;     // best run at this difficulty (loaded on game over)
   bool   _runOver   = false; // entropy hit 1.0 → run ended
-  static const double _kEntHint     = 0.05;  // TUNE — per hint
-  static const double _kEntSolution = 0.20;  // TUNE — per solution peek
-
   /// Per-difficulty entropy tuning (all // TUNE). The **vent is a relief, not a
   /// reset** — smaller than a typical board's passive rise — so entropy gently
   /// *creeps up* over a run (you survive as long as you can, then heat-death). Easy
-  /// stays forgiving: clean, fast solves keep it low, but a slow/messy or deep run
-  /// drifts into the warning bands. Hard climbs fast. Depth shortens the tick.
-  ({int tick, double step, double vent, double backtrack}) _ent() {
-    final (int baseTick, int floor, double step, double vent, double back) =
-      switch (widget.difficulty) {
-        RunDifficulty.easy   => (14, 9, 0.036, 0.10, 0.028),
-        RunDifficulty.medium => (10, 6, 0.048, 0.14, 0.040),
-        RunDifficulty.hard   => (7,  4, 0.062, 0.16, 0.050),
-      };
+  /// stays forgiving; Hard climbs fast. Depth shortens the tick.
+  /// **Assist cost** (hint/solution entropy) is graduated to keep help inviting
+  /// where most players are: Easy = free · Medium = half · Hard = full. (The
+  /// clean-bonus score loss already deters peeking on the leaderboard at every tier.)
+  ({int tick, double step, double vent, double backtrack, double hint, double solution})
+      _ent() {
+    final (int baseTick, int floor, double step, double vent, double back,
+           double hint, double sol) = switch (widget.difficulty) {
+      RunDifficulty.easy   => (14, 9, 0.036, 0.10, 0.028, 0.0,   0.0),
+      RunDifficulty.medium => (10, 6, 0.048, 0.14, 0.040, 0.025, 0.10),
+      RunDifficulty.hard   => (7,  4, 0.062, 0.16, 0.050, 0.05,  0.20),
+    };
     return (tick: max(floor, baseTick - level ~/ 7),     // slow depth-tightening
-            step: step, vent: vent, backtrack: back);
+            step: step, vent: vent, backtrack: back, hint: hint, solution: sol);
   }
 
   int _entropyTick() => _ent().tick;
@@ -432,7 +432,19 @@ class _PuzzleScreenState extends State<PuzzleScreen>
       if (lvl < floor) lvl = floor;
     }
 
-    grid = PuzzleGrid.generate(lvl, rng: rng, force: force, multiverseBoards: mvBoards);
+    // Multiverse is the Medium+ showpiece: in Entropy, gate it by difficulty so it
+    // never appears on Easy and rewards unlocking Medium. Daily/Syntropy keep the
+    // default — Syntropy only offers it once unlocked (via the seen_* flags), so it
+    // stays gated there regardless.
+    final mvGate = _isEntropy
+        ? switch (widget.difficulty) {
+            RunDifficulty.easy   => 1 << 30,   // unreachable → never on Easy
+            RunDifficulty.medium => 8,
+            RunDifficulty.hard   => 5,
+          }
+        : kMultiverseLevel;
+    grid = PuzzleGrid.generate(lvl, rng: rng, force: force,
+        multiverseBoards: mvBoards, multiverseGate: mvGate);
     path
       ..clear()
       ..add(grid.startCell);
@@ -855,7 +867,7 @@ class _PuzzleScreenState extends State<PuzzleScreen>
     setState(() => _showSolution = !_showSolution);
     if (_showSolution) {
       _peeked = true;          // revealing the answer forfeits the UNAIDED badge
-      _addEntropy(_kEntSolution);
+      _addEntropy(_ent().solution);   // free on Easy · half on Medium · full on Hard
       _trace.repeat();
     } else {
       _trace.stop();
@@ -898,7 +910,7 @@ class _PuzzleScreenState extends State<PuzzleScreen>
     _hintCells  = sol.sublist(t, min(t + _hintSteps, sol.length));
     _hintTarget = next;                   // lock stepping to this cell until taken
     _peeked = true;                       // a hint forfeits the UNAIDED badge
-    _addEntropy(_kEntHint);
+    _addEntropy(_ent().hint);             // free on Easy · half on Medium · full on Hard
     HapticFeedback.selectionClick();
     setState(() {});
   }

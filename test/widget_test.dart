@@ -294,6 +294,21 @@ void main() {
     expect(entangledSeen, greaterThan(15));
   });
 
+  test('multiverse gate is difficulty-scaled (Easy never; Medium reveals early)', () {
+    // Easy passes an unreachable gate → multiverse never auto-spawns, any level.
+    for (var level = 1; level <= 30; level++) {
+      for (var s = 0; s < 5; s++) {
+        expect(
+            PuzzleGrid.generate(level, rng: Random(s), multiverseGate: 1 << 30).boardCount,
+            1, reason: 'an unreachable gate must suppress multiverse at level $level');
+      }
+    }
+    // A lowered gate (e.g. Medium ≈ 8) guarantees the first encounter at that level.
+    for (var s = 0; s < 10; s++) {
+      expect(PuzzleGrid.generate(8, rng: Random(s), multiverseGate: 8).boardCount, 2);
+    }
+  });
+
   test('daily badges: earned per independent condition', () {
     const par = 50;
     int b(bool bt, bool pk, int s) =>

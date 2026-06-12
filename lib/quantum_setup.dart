@@ -262,7 +262,10 @@ class _QuantumSetupScreenState extends State<QuantumSetupScreen> {
                       color: selected ? Colors.white : const Color(0xff8aa6bc),
                       fontSize: 13, fontFamily: 'monospace',
                       fontWeight: FontWeight.bold, letterSpacing: 2))
-                : Text('? ? ?     ·     UNLOCK AT LEVEL ${t.unlockLevel}',
+                : Text(
+                    t.seenKey == 'seen_multiverse'
+                      ? '? ? ?     ·     UNLOCK ON MEDIUM'
+                      : '? ? ?     ·     UNLOCK AT LEVEL ${t.unlockLevel}',
                     style: const TextStyle(
                       color: Color(0xff44607a), fontSize: 11,
                       fontFamily: 'monospace', letterSpacing: 2)),

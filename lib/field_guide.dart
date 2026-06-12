@@ -394,7 +394,10 @@ class _FieldGuideScreenState extends State<FieldGuideScreen> {
                 )
               : Padding(
                   padding: const EdgeInsets.symmetric(vertical: 10),
-                  child: Text('? ? ?     ·     UNLOCKS AT LEVEL ${e.unlockLevel}',
+                  child: Text(
+                    e.seenKey == 'seen_multiverse'
+                      ? '? ? ?     ·     UNLOCKS ON MEDIUM'
+                      : '? ? ?     ·     UNLOCKS AT LEVEL ${e.unlockLevel}',
                     style: const TextStyle(
                       color: Color(0xff44607a), fontSize: 11,
                       fontFamily: 'monospace', letterSpacing: 2)),

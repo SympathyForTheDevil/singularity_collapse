@@ -233,20 +233,23 @@ class PuzzleGrid {
   /// listed features are inserted (empty set → a plain board). When null,
   /// features unlock by [level]. Used by the dev menu to test a given mechanic.
   static PuzzleGrid generate(int level,
-      {Random? rng, Set<PuzzleFeature>? force, int? multiverseBoards}) {
+      {Random? rng, Set<PuzzleFeature>? force, int? multiverseBoards,
+       int multiverseGate = kMultiverseLevel}) {
     final r      = rng ?? Random();
     final forced = force != null;   // dev menu picks the exact mechanic set
 
     // ── Multiverse (exclusive; reshapes the board into stacked sheets) ─────────
-    // Forced via the dev menu, OR auto: a guaranteed first encounter at level 16
-    // (2 boards) and a first 3-board board at 26, then occasional low-probability
-    // spawns. Its own generator, so this is an early return.
+    // Forced via the dev menu, OR auto: a guaranteed first encounter at the
+    // [multiverseGate] level (2 boards) and a first 3-board board at 26, then
+    // occasional low-probability spawns. The gate is **difficulty-scaled** by the
+    // caller — multiverse is the Medium+ showpiece (Easy passes an unreachable gate
+    // → never; Medium ~8; Hard ~5). Its own generator, so this is an early return.
     final forceMv = force?.contains(PuzzleFeature.multiverse) ?? false;
     int? autoMvBoards;
-    if (!forced) {
-      if (level == kMultiverseLevel)       autoMvBoards = 2;
+    if (!forced && level >= multiverseGate) {   // the gate blocks ALL auto-multiverse below it
+      if (level == multiverseGate)         autoMvBoards = 2;
       else if (level == kMultiverse3Level) autoMvBoards = 3;
-      else if (level > kMultiverseLevel && r.nextDouble() < 0.12) {
+      else if (r.nextDouble() < 0.12) {
         autoMvBoards = (level >= kMultiverse3Level && r.nextBool()) ? 3 : 2;
       }
     }
