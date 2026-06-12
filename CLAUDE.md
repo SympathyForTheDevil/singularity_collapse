@@ -45,7 +45,7 @@ lib/
   theme_service.dart Persisted cosmetic board themes (Penrose 45° skin)
   quantum_setup.dart QuantumSetupScreen — tailor-your-session picker (types + timed)
   quantum_service.dart Persisted Quantum-mode config (chosen types, normal, timed)
-  settings_screen.dart SettingsScreen — audio options (music picker + volume + sound)
+  settings_screen.dart SettingsScreen — audio (music picker + volumes + sound) + About/credits
   stats_service.dart Lifetime gameplay counters (solved/perfect/per-mechanic) → achievements
   achievements_screen.dart AchievementsScreen (🏆 on Home) — achievements + mechanics progression
 test/

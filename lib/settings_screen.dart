@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'audio.dart';
 
 /// Settings — the home for audio options (and room to grow: themes…). Master
@@ -131,6 +132,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       fontFamily: 'monospace', letterSpacing: 1)),
                   const SizedBox(height: 12),
                   for (final t in kMusicTracks) _trackTile(t),
+
+                  const SizedBox(height: 28),
+                  _sectionLabel('ABOUT'),
+                  const SizedBox(height: 12),
+                  _aboutPanel(),
                 ],
               ),
             ),
@@ -144,6 +150,86 @@ class _SettingsScreenState extends State<SettingsScreen> {
       style: const TextStyle(
         color: Color(0xff5a7488), fontSize: 11, fontFamily: 'monospace',
         fontWeight: FontWeight.bold, letterSpacing: 3));
+
+  // ── About / credits ─────────────────────────────────────────────────────────
+  static const _kVersion = '1.0.0';            // keep in sync with pubspec version
+  static const _kSite    = 'https://singularitycollapse.com';
+  static const _kSupport = 'mailto:support@singularitycollapse.com';
+  static const _kPrivacy = 'https://singularitycollapse.com/privacy';
+
+  Future<void> _open(String url) async {
+    AudioService.instance.ui();
+    try {
+      await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+    } catch (_) {/* no handler / offline — fail quietly */}
+  }
+
+  Widget _aboutPanel() {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: _panel,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: _border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('SINGULARITY: COLLAPSE',
+            style: TextStyle(
+              color: _gold, fontSize: 13, fontFamily: 'monospace',
+              fontWeight: FontWeight.bold, letterSpacing: 2)),
+          const SizedBox(height: 4),
+          Text('v$_kVersion     ·     Developed by Adam Ettinger',
+            style: const TextStyle(
+              color: Color(0xff8aa6bc), fontSize: 10.5,
+              fontFamily: 'monospace', letterSpacing: 0.5)),
+          const SizedBox(height: 6),
+          const Text('Music: public-domain works by Bach, Satie, Chopin & '
+            'Tchaikovsky, synthesized in-engine.',
+            style: TextStyle(
+              color: Color(0xff6c89a4), fontSize: 9.5,
+              fontFamily: 'monospace', letterSpacing: 0.5, height: 1.4)),
+          const SizedBox(height: 10),
+          Divider(color: _border.withValues(alpha: 0.6), height: 1),
+          _linkRow(Icons.language_rounded, 'WEBSITE', () => _open(_kSite)),
+          _linkRow(Icons.mail_outline_rounded, 'SUPPORT', () => _open(_kSupport)),
+          _linkRow(Icons.privacy_tip_outlined, 'PRIVACY POLICY', () => _open(_kPrivacy)),
+          _linkRow(Icons.code_rounded, 'OPEN-SOURCE LICENSES', () {
+            AudioService.instance.ui();
+            showLicensePage(
+              context: context,
+              applicationName: 'Singularity: Collapse',
+              applicationVersion: 'v$_kVersion');
+          }),
+        ],
+      ),
+    );
+  }
+
+  Widget _linkRow(IconData icon, String label, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        child: Row(
+          children: [
+            Icon(icon, color: _cyan, size: 18),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(label,
+                style: const TextStyle(
+                  color: Color(0xff9fbdd2), fontSize: 12, fontFamily: 'monospace',
+                  fontWeight: FontWeight.bold, letterSpacing: 1.5)),
+            ),
+            const Icon(Icons.chevron_right_rounded,
+              color: Color(0xff5a7488), size: 18),
+          ],
+        ),
+      ),
+    );
+  }
 
   Widget _soundToggle() {
     final on = !_muted;
