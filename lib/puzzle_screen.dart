@@ -8,6 +8,7 @@ import 'daily_service.dart';
 import 'field_guide.dart';
 import 'progress_service.dart';
 import 'puzzle_model.dart';
+import 'stats_service.dart';
 import 'theme_service.dart';
 
 enum PuzzleMode { daily, entropy, quantum }
@@ -905,6 +906,15 @@ class _PuzzleScreenState extends State<PuzzleScreen>
   void _onSolved() {
     _stopTimer();
     solved = true;
+    StatsService.bump({                          // lifetime stats → achievements
+      StatsService.solved: 1,
+      if (!_backtracked) StatsService.perfect: 1,
+      if (grid.wormholes.isNotEmpty) StatsService.wormhole: 1,
+      if (grid.gates.isNotEmpty) StatsService.gate: 1,
+      if (grid.wells.isNotEmpty) StatsService.well: 1,
+      if (grid.hasQuantum) StatsService.entangled: 1,
+      if (grid.hasMultiverse) StatsService.multiverse: 1,
+    });
     HapticFeedback.heavyImpact();
     AudioService.instance.collapse();
     _solve.forward(from: 0);

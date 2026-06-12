@@ -46,6 +46,8 @@ lib/
   quantum_setup.dart QuantumSetupScreen — tailor-your-session picker (types + timed)
   quantum_service.dart Persisted Quantum-mode config (chosen types, normal, timed)
   settings_screen.dart SettingsScreen — audio options (music picker + volume + sound)
+  stats_service.dart Lifetime gameplay counters (solved/perfect/per-mechanic) → achievements
+  achievements_screen.dart AchievementsScreen (🏆 on Home) — achievements + mechanics progression
 test/
   widget_test.dart   Engine + medal/streak/freeze unit tests
 ```

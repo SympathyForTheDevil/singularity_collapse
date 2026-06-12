@@ -135,14 +135,18 @@ are the obvious value props (they are).
 Right now mechanic unlocks (`seen_*` flags → Field Guide → Syntropy picker) are
 invisible in the main flow.
 
-- ✅ **Home-screen progression strip** — the five mechanics as lit/dim icons + a
-  "MECHANICS N/5 · NEXT · <name> · L<gate>" teaser, on the home screen above the
-  footer; taps through to the Field Guide. Surfaces the unlock loop in the main flow.
-- ✅ **Unlock celebration** — the first-encounter tutorial card now shows a
+- ✅ **Unlock celebration** — the first-encounter tutorial card shows a
   "✦ NEW MECHANIC UNLOCKED ✦" banner (gold, glowing) for mechanic cards, with an
   unlock chime + haptic when a mechanic is first discovered.
+- ✅ **Achievements screen** (`achievements_screen.dart`, 🏆 on Home) — ~14
+  achievements (Puzzle Master, Multiverse Traveller, Perfectionist, the four mechanic
+  specialists, Explorer, Heat-Death Defier, streak milestones) with per-target
+  progress bars, backed by lifetime counters (`StatsService`, bumped in `_onSolved`)
+  + existing services. The **mechanics-discovered progression** lives here now too —
+  **moved off the cluttered main menu** into this submenu (the old home strip is gone).
+- ☐ **Achievement-unlocked toast** — a small in-game celebration the moment one is
+  earned (currently surfaced only on the Achievements screen).
 - ☐ **Level-select / chapter view** (optional) — if infinity should become chaptered.
-- ☐ Optional polish: a "deepest stage / solved count" stat on the strip.
 
 **Effort:** medium. **Why later:** it dresses the systems Phases 2–3 establish.
 
