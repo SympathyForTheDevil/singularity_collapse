@@ -555,8 +555,10 @@ licenses); the **app icon**.
 - ☐ **Monetization (Phase 3)** — model = **free + rewarded ads (AdMob) + a Premium /
   Remove-Ads IAP**; `PremiumService` + IAP/ads plumbing **not built yet**. Ads add
   privacy-disclosure work (ATT, UMP consent, data-safety) — see LAUNCH.md.
-- ☐ **Website** — privacy + support pages must be **live** before ship (the in-app
-  About links point to `singularitycollapse.com` + `/privacy`).
+- ✅ **Website — LIVE** (2026-06-13) at `https://singularitycollapse.com` (+ `/privacy`,
+  `/support`, valid HTTPS) — static site on GitHub Pages, repo
+  `SympathyForTheDevil/singularitycollapse-site`, custom domain via Namecheap DNS. Matches
+  the in-app About links. Remaining: tick Enforce HTTPS once GitHub's DNS check goes green.
 - ✅ **iOS testing — LIVE (2026-06-12)** — Codemagic→TestFlight working; first signed
   build installed (Apple ID `6779779848`, key `CodemagicAppStore`/App Manager). Builds
   are **manual** from the Codemagic UI. Signing uses a persistent RSA key in the secure
@@ -565,8 +567,8 @@ licenses); the **app icon**.
 - ☐ **Polish** — gate/remove the `· dev ·` menu for production; finish the **readability
   pass** (Settings/Streak/Field Guide/in-game HUD/overlays — home done); switch the Play
   artifact to **AAB**; on-device tuning confirmation (entropy feel, multiverse, entangled).
-- ⚠ **Open placeholder:** support email defaults to `support@singularitycollapse.com`
-  in `settings_screen.dart` — confirm/replace.
+- ◐ **Support email:** `support@singularitycollapse.com` (in `settings_screen.dart`) is the
+  real address — wire **Namecheap free email forwarding** → adam.ettinger@gmail.com (do/confirm).
 
 **Android signing** — ✅ DONE. Keystore at `android/collapse-release.jks`
    (git-ignored). GitHub secrets set: KEYSTORE_BASE64, KEY_STORE_PASSWORD,

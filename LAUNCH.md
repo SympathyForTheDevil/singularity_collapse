@@ -93,15 +93,20 @@ Legend: ☐ todo · ◐ in progress · ✅ done
 
 ## Part 3 — Website (privacy policy + support — both stores require it)
 
-- ☐ **Privacy policy URL** (required by *both* stores). Write it to match reality:
-  *"stores settings locally on your device (no account, no servers); no analytics;
-  purchases are processed by Apple/Google."* Update it if you later add analytics/ads.
-- ☐ **Support contact** — Apple needs a **support URL**; Google needs a support
-  **email** (URL optional).
-- ☐ **Host it free on GitHub Pages** (you already have the repo) — a `/docs` folder or
-  a `gh-pages` branch with `privacy.html` + `support.html`. Optionally a one-page
-  **landing site** (hero, 3–4 screenshots, store badges) for marketing/ASO.
-- Optional: a custom domain (~$10–15/yr) pointed at GitHub Pages.
+✅ **LIVE at https://singularitycollapse.com** (2026-06-13) — static site, hosted free on
+**GitHub Pages** (repo `SympathyForTheDevil/singularitycollapse-site`), custom domain via
+Namecheap DNS (4 A records → GitHub IPs + `www` CNAME), valid auto-provisioned HTTPS cert,
+`www`→apex redirect. Pages match the in-app About links exactly.
+- ✅ **Privacy policy** — `https://singularitycollapse.com/privacy`. Written to match v1
+  reality (local storage only; no accounts/servers/analytics/ads; purchases via
+  Apple/Google). ⚠ **Update it if ads/analytics are ever added.**
+- ✅ **Support page** — `https://singularitycollapse.com/support` (+ FAQ). Satisfies
+  Apple's support-URL and Google's support-email requirements.
+- ✅ **Landing page** — hero + features + collapse ladder (asset-free CSS/SVG black hole).
+- ◐ **Support email** — `support@singularitycollapse.com` → set up **Namecheap free email
+  forwarding** to adam.ettinger@gmail.com (do/confirm the forwarder).
+- ◐ **Enforce HTTPS** — tick the box in GitHub Pages once the (lagging) DNS check flips
+  green; the cert is already active.
 
 ---
 
