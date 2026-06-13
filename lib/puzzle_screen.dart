@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'achievement_service.dart';
 import 'audio.dart';
 import 'cosmic.dart';
 import 'daily_service.dart';
@@ -137,6 +138,7 @@ class _PuzzleScreenState extends State<PuzzleScreen>
   late final AnimationController _sling;   // gravity-well launch streak
   late final AnimationController _trace;   // solution-reveal tracer sweep
   late final AnimationController _measure; // entangled collapse flash
+  late final AnimationController _toastCtrl; // achievement-unlocked toast slide/fade
 
   // First-encounter teaching cards. A mechanic is taught once, ever.
   final Set<String> _seenKeys = {};        // persisted "encountered" flags
@@ -159,6 +161,11 @@ class _PuzzleScreenState extends State<PuzzleScreen>
   Timer?   _hintTimer;
   int      _lastNudgeMs = 0;               // throttle the nudge
   int      _nudgeKind   = 0;               // 0 none · 1 black hole · 2 mass gate
+
+  // Achievement-unlocked toasts: a queue shown one at a time as a top banner.
+  Achievement? _toast;
+  final List<Achievement> _toastQueue = [];
+  Timer? _toastTimer;
 
   double _boardSize = 320;
   _BoardLayout? _layout;   // board placement (multi-board aware), set each build
@@ -247,6 +254,8 @@ class _PuzzleScreenState extends State<PuzzleScreen>
       vsync: this, duration: const Duration(milliseconds: 2600));
     _measure = AnimationController(
       vsync: this, duration: const Duration(milliseconds: 650));
+    _toastCtrl = AnimationController(
+      vsync: this, duration: const Duration(milliseconds: 380));
     _solve = AnimationController(
       vsync: this, duration: const Duration(milliseconds: 2000))
       ..addStatusListener((s) async {
@@ -340,6 +349,7 @@ class _PuzzleScreenState extends State<PuzzleScreen>
     // (ambient hum keeps playing — it's app-wide)
     _timer?.cancel();
     _hintTimer?.cancel();
+    _toastTimer?.cancel();
     _pulse.dispose();
     _solve.dispose();
     _nudge.dispose();
@@ -348,6 +358,7 @@ class _PuzzleScreenState extends State<PuzzleScreen>
     _sling.dispose();
     _trace.dispose();
     _measure.dispose();
+    _toastCtrl.dispose();
     super.dispose();
   }
 
@@ -918,7 +929,16 @@ class _PuzzleScreenState extends State<PuzzleScreen>
   void _onSolved() {
     _stopTimer();
     solved = true;
-    StatsService.bump({                          // lifetime stats → achievements
+    _recordStatsAndAchievements();   // bump lifetime stats → toast any new unlocks
+    HapticFeedback.heavyImpact();
+    AudioService.instance.collapse();
+    _solve.forward(from: 0);
+  }
+
+  /// Bump the lifetime counters this solve earned, then surface a toast for any
+  /// achievement that just crossed its target (idempotent via a persisted set).
+  Future<void> _recordStatsAndAchievements() async {
+    await StatsService.bump({                     // lifetime stats → achievements
       StatsService.solved: 1,
       if (!_backtracked) StatsService.perfect: 1,
       if (grid.wormholes.isNotEmpty) StatsService.wormhole: 1,
@@ -927,9 +947,31 @@ class _PuzzleScreenState extends State<PuzzleScreen>
       if (grid.hasQuantum) StatsService.entangled: 1,
       if (grid.hasMultiverse) StatsService.multiverse: 1,
     });
-    HapticFeedback.heavyImpact();
-    AudioService.instance.collapse();
-    _solve.forward(from: 0);
+    final newly = await AchievementService.claimNewlyUnlocked();
+    if (newly.isNotEmpty && mounted) _enqueueAchievementToasts(newly);
+  }
+
+  void _enqueueAchievementToasts(List<Achievement> list) {
+    _toastQueue.addAll(list);
+    if (_toast == null) _advanceToast();   // start the chain if idle
+  }
+
+  /// Show the next queued unlock as a top banner, then slide it out and recurse.
+  void _advanceToast() {
+    _toastTimer?.cancel();
+    if (_toastQueue.isEmpty) return;
+    setState(() => _toast = _toastQueue.removeAt(0));
+    AudioService.instance.unlock();
+    HapticFeedback.mediumImpact();
+    _toastCtrl.forward(from: 0);
+    _toastTimer = Timer(const Duration(milliseconds: 2800), () {
+      if (!mounted) return;
+      _toastCtrl.reverse().then((_) {
+        if (!mounted) return;
+        setState(() => _toast = null);
+        _advanceToast();
+      });
+    });
   }
 
   String _buildShareText() {
@@ -1197,7 +1239,62 @@ class _PuzzleScreenState extends State<PuzzleScreen>
           // ── Share overlay (daily mode, after solve) ─────────────────────
           if (_showShare) _buildShareOverlay(),
           if (_runOver) _buildGameOverOverlay(),
+
+          // ── Achievement-unlocked toast (top banner, above everything) ────
+          if (_toast != null) _buildAchievementToast(_toast!),
         ],
+      ),
+    );
+  }
+
+  /// A celebratory top banner shown the moment an achievement is earned. Slides in
+  /// from the top, holds, slides out; queued so several can show in sequence.
+  Widget _buildAchievementToast(Achievement a) {
+    final slide = Tween<Offset>(begin: const Offset(0, -1.3), end: Offset.zero)
+        .animate(CurvedAnimation(parent: _toastCtrl, curve: Curves.easeOutBack));
+    return Positioned(
+      top: 0, left: 0, right: 0,
+      child: SafeArea(
+        child: SlideTransition(
+          position: slide,
+          child: FadeTransition(
+            opacity: _toastCtrl,
+            child: Center(
+              child: Container(
+                margin: const EdgeInsets.only(top: 10),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                decoration: BoxDecoration(
+                  color: const Color(0xff0a1018),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: _accent, width: 1.5),
+                  boxShadow: const [BoxShadow(color: Color(0x66ffc24d), blurRadius: 18)],
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    GuideIcon(a.icon, size: 34),
+                    const SizedBox(width: 12),
+                    Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('✦ ACHIEVEMENT UNLOCKED ✦',
+                          style: TextStyle(
+                            color: _accent, fontSize: 9, fontFamily: 'monospace',
+                            fontWeight: FontWeight.bold, letterSpacing: 2)),
+                        const SizedBox(height: 3),
+                        Text(a.name.toUpperCase(),
+                          style: const TextStyle(
+                            color: Colors.white, fontSize: 14, fontFamily: 'monospace',
+                            fontWeight: FontWeight.bold, letterSpacing: 1.5)),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }

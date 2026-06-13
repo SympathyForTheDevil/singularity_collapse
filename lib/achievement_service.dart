@@ -1,5 +1,7 @@
 import 'dart:math';
 
+import 'package:shared_preferences/shared_preferences.dart';
+
 import 'audio.dart';            // kMusicTracks — to resolve which tracks are unlocked
 import 'daily_service.dart';
 import 'field_guide.dart';
@@ -93,5 +95,25 @@ class AchievementService {
       for (final t in kMusicTracks)
         if (!kTrackUnlock.containsKey(t.id) || ids.contains(kTrackUnlock[t.id])) t.id,
     };
+  }
+
+  static const String _celebratedKey = 'celebrated_achievements';
+
+  /// Achievements that have *just* crossed their target since the last call —
+  /// idempotent (each is announced once, tracked in a persisted set), so callers can
+  /// invoke it freely after any state change. On the very first call it silently
+  /// baselines, so pre-existing unlocks aren't re-announced on an existing install.
+  static Future<List<Achievement>> claimNewlyUnlocked() async {
+    final prefs   = await SharedPreferences.getInstance();
+    final current = await unlockedIds();
+    final stored  = prefs.getStringList(_celebratedKey);
+    if (stored == null) {                       // first run: baseline, announce nothing
+      await prefs.setStringList(_celebratedKey, current.toList());
+      return const [];
+    }
+    final newIds = current.difference(stored.toSet());
+    if (newIds.isEmpty) return const [];
+    await prefs.setStringList(_celebratedKey, current.toList());
+    return [for (final a in kAchievements) if (newIds.contains(a.id)) a];
   }
 }
