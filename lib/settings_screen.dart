@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'achievement_service.dart';
 import 'audio.dart';
 
 /// Settings — the home for audio options (and room to grow: themes…). Master
@@ -22,6 +23,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   late double _sfxVol;
   late double _musicVol;
   late Set<String> _enabled;
+  late Set<String> _unlocked;              // track ids the player has unlocked
+  Map<String, int> _achValues = const {};  // achievement progress, for lock labels
 
   @override
   void initState() {
@@ -31,7 +34,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _sfxVol   = a.sfxVolume;
     _musicVol = a.musicVolume;
     _enabled  = {...a.enabledMusic};
+    _unlocked = {...a.unlockedMusic};       // best-guess; refreshed by _loadUnlocks
     a.enterMusicContext();   // preview the rotation while on this screen
+    _loadUnlocks();
+  }
+
+  Future<void> _loadUnlocks() async {
+    final tracks = await AchievementService.unlockedTracks();
+    final vals   = await AchievementService.values();
+    AudioService.instance.setUnlockedMusic(tracks);   // keep the rotation in sync
+    if (mounted) setState(() { _unlocked = tracks; _achValues = vals; });
   }
 
   @override
@@ -312,6 +324,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Widget _trackTile(MusicTrack t) {
+    if (!_unlocked.contains(t.id)) return _lockedTile(t);
     final on = _enabled.contains(t.id);
     final playing = AudioService.instance.currentTrack == t.id;
     return Container(
@@ -373,6 +386,50 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  // A track not yet earned: greyed, lock icon, and the achievement that unlocks it
+  // (with live progress). Not previewable or selectable until unlocked.
+  Widget _lockedTile(MusicTrack t) {
+    final a = kAchievements.firstWhere((x) => x.id == kTrackUnlock[t.id]);
+    final cur = _achValues[a.stat] ?? 0;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      decoration: BoxDecoration(
+        color: _panel,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: const Color(0xff1c2a36)),
+      ),
+      child: Opacity(
+        opacity: 0.6,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 12, 14, 12),
+          child: Row(
+            children: [
+              const Icon(Icons.lock_rounded, color: Color(0xff5a7488), size: 20),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(t.title.toUpperCase(),
+                      style: const TextStyle(
+                        color: Color(0xff8aa6bc), fontSize: 13,
+                        fontFamily: 'monospace',
+                        fontWeight: FontWeight.bold, letterSpacing: 2)),
+                    const SizedBox(height: 3),
+                    Text('UNLOCK · ${a.name.toUpperCase()} · $cur/${a.target}',
+                      style: const TextStyle(
+                        color: Color(0xff5a7488), fontSize: 9.5,
+                        fontFamily: 'monospace', letterSpacing: 1)),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

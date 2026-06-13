@@ -3,6 +3,8 @@ import 'dart:math';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:singularity_collapse/achievement_service.dart';
+import 'package:singularity_collapse/audio.dart';
 import 'package:singularity_collapse/daily_service.dart';
 import 'package:singularity_collapse/progress_service.dart';
 import 'package:singularity_collapse/puzzle_model.dart';
@@ -340,5 +342,53 @@ void main() {
     expect(g3.wormholes, isEmpty);
     expect(g3.gates, isEmpty);
     expect(g3.wells, isEmpty);
+  });
+
+  // ── Music / Penrose unlock progression ─────────────────────────────────────
+  test('track→achievement unlock map is internally consistent', () {
+    final trackIds = {for (final t in kMusicTracks) t.id};
+    final achIds   = {for (final a in kAchievements) a.id};
+    for (final e in kTrackUnlock.entries) {
+      expect(trackIds.contains(e.key), isTrue, reason: '${e.key} is not a track');
+      expect(achIds.contains(e.value), isTrue, reason: '${e.value} not an achievement');
+    }
+    // Exactly one free starter track, and it is the Bach Prelude in C.
+    expect(trackIds.difference(kTrackUnlock.keys.toSet()), {'bach_prelude'});
+    // Korobeiniki ← Grandmaster, per the design.
+    expect(kTrackUnlock['korobeiniki'], 'grandmaster');
+  });
+
+  test('entropy-ladder unlock achievements exist with the right gates', () {
+    final byId = {for (final a in kAchievements) a.id: a};
+    expect(byId['red_giant']?.stat, 'easy_level');
+    expect(byId['red_giant']?.target, 16);
+    expect(byId['event_horizon']?.stat, 'medium_level');
+    expect(byId['event_horizon']?.target, 16);
+  });
+
+  test('a fresh player has only the free track unlocked', () async {
+    SharedPreferences.setMockInitialValues({});
+    expect(await AchievementService.unlockedTracks(), {'bach_prelude'});
+  });
+
+  test('500 solves unlocks Korobeiniki (Grandmaster), not the entropy-gated ones', () async {
+    SharedPreferences.setMockInitialValues({'lifetime_stats': '{"solved":500}'});
+    final tracks = await AchievementService.unlockedTracks();
+    expect(tracks.contains('korobeiniki'), isTrue);        // Grandmaster (500)
+    expect(tracks.contains('satie_gymnopedie'), isTrue);   // Apprentice (10)
+    expect(tracks.contains('sugar_plum'), isFalse);        // needs Red Giant (Medium)
+  });
+
+  test('Easy Lv 16 unlocks Red Giant (Medium) → Sugar Plum', () async {
+    SharedPreferences.setMockInitialValues({'entropy_maxlevel_easy': 16});
+    expect((await AchievementService.unlockedIds()).contains('red_giant'), isTrue);
+    expect((await AchievementService.unlockedTracks()).contains('sugar_plum'), isTrue);
+  });
+
+  test('Medium Lv 16 unlocks Event Horizon (Hard) → Toccata + Penrose gate', () async {
+    SharedPreferences.setMockInitialValues({'entropy_maxlevel_medium': 16});
+    // Event Horizon is also the Penrose-skin gate (home reads the same condition).
+    expect((await AchievementService.unlockedIds()).contains('event_horizon'), isTrue);
+    expect((await AchievementService.unlockedTracks()).contains('toccata_techno'), isTrue);
   });
 }

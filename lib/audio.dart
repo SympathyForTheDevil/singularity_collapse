@@ -79,10 +79,14 @@ class AudioService with WidgetsBindingObserver {
   bool _musicContext  = false;     // a game / settings screen is active
   bool _backgrounded  = false;     // app is in the background (lock / app switch)
   bool _musicStarting = false;     // guard against overlapping async starts
-  Set<String> _enabledMusic = {};  // track ids in the rotation (empty = silent)
+  Set<String> _enabledMusic = {};  // track ids the player added to the rotation
+  // Track ids the player has unlocked via achievements (free tracks + earned ones).
+  // Fail-open default (all) until the app pushes the real set via setUnlockedMusic;
+  // the effective rotation pool is `_enabledMusic ∩ _unlockedMusic`.
+  Set<String> _unlockedMusic = {for (final t in kMusicTracks) t.id};
   String _currentTrack = '';       // id currently playing
   bool   _musicOn      = true;     // quick on/off (pause-menu toggle)
-  double _musicVolume  = 0.7;      // 0..1
+  double _musicVolume  = 0.5;      // 0..1 (default 50% on first launch)
   double _sfxVolume    = 0.9;      // 0..1 (applied to every sound effect)
   final double _padTarget = 0.30;  // app-wide ambient-hum level (ducked under music)
   static const _enabledKey  = 'music_enabled';
@@ -90,6 +94,9 @@ class AudioService with WidgetsBindingObserver {
   static const _musicVolKey = 'music_volume';
   static const _sfxVolKey   = 'sfx_volume';
   Set<String> get enabledMusic => _enabledMusic;
+  Set<String> get unlockedMusic => _unlockedMusic;
+  /// The effective rotation pool: tracks both enabled AND unlocked.
+  Set<String> get _activePool => _enabledMusic.intersection(_unlockedMusic);
   String get currentTrack => _currentTrack;   // playing track (for settings preview)
   bool   get musicOn     => _musicOn;
   double get musicVolume => _musicVolume;
@@ -101,7 +108,7 @@ class AudioService with WidgetsBindingObserver {
     try {
       final prefs = await SharedPreferences.getInstance();
       _muted       = prefs.getBool(_muteKey) ?? false;
-      _musicVolume = prefs.getDouble(_musicVolKey) ?? 0.7;
+      _musicVolume = prefs.getDouble(_musicVolKey) ?? 0.5;
       _sfxVolume   = prefs.getDouble(_sfxVolKey) ?? 0.9;
       _musicOn     = prefs.getBool(_musicOnKey) ?? true;
       final validIds = {for (final t in kMusicTracks) t.id};
@@ -269,6 +276,18 @@ class AudioService with WidgetsBindingObserver {
     await prefs.setStringList(_enabledKey, _enabledMusic.toList());
   }
 
+  /// Set which tracks are unlocked (free + achievement-earned). Called at startup and
+  /// whenever achievements may have changed (home / settings). If the currently
+  /// playing track just became locked, switch to another unlocked+enabled one.
+  void setUnlockedMusic(Set<String> ids) {
+    _unlockedMusic = ids;
+    if (_currentTrack.isNotEmpty && !_activePool.contains(_currentTrack)) {
+      _stopMusic();
+      _currentTrack = '';
+    }
+    _updateMusic();
+  }
+
   /// Preview a specific track on the settings screen — plays it now regardless of
   /// whether it's in the rotation. Leaves the enabled set untouched; in-game
   /// rotation resumes from the enabled pool afterwards.
@@ -316,7 +335,7 @@ class AudioService with WidgetsBindingObserver {
   /// Rotate to a different random enabled track — called on each level-up. No-op
   /// unless music is already playing and ≥2 tracks are enabled.
   void nextTrack() {
-    if (_musicHandle == null || _enabledMusic.length < 2) return;
+    if (_musicHandle == null || _activePool.length < 2) return;
     final next = _pickTrack();
     if (next.isEmpty || next == _currentTrack) return;
     _currentTrack = next;
@@ -326,7 +345,7 @@ class AudioService with WidgetsBindingObserver {
 
   /// A random enabled track id, preferring one different from the current.
   String _pickTrack() {
-    final pool = _enabledMusic.toList();
+    final pool = _activePool.toList();
     if (pool.isEmpty) return '';
     final others = pool.where((t) => t != _currentTrack).toList();
     final pick = others.isEmpty ? pool : others;
@@ -334,7 +353,7 @@ class AudioService with WidgetsBindingObserver {
   }
 
   bool get _musicShouldPlay => _ready && !_muted && !_backgrounded &&
-      _musicOn && _musicContext && _enabledMusic.isNotEmpty;
+      _musicOn && _musicContext && _activePool.isNotEmpty;
 
   /// Start or stop the loop to match the current state.
   void _updateMusic() {
@@ -348,7 +367,7 @@ class AudioService with WidgetsBindingObserver {
   Future<void> _startMusic() async {
     if (_musicHandle != null || _musicStarting || !_musicShouldPlay) return;
     // Keep the current track if it's still enabled, else pick a fresh one.
-    if (_currentTrack.isEmpty || !_enabledMusic.contains(_currentTrack)) {
+    if (_currentTrack.isEmpty || !_activePool.contains(_currentTrack)) {
       _currentTrack = _pickTrack();
     }
     final id = _currentTrack;
@@ -358,7 +377,7 @@ class AudioService with WidgetsBindingObserver {
     _musicStarting = false;
     // Conditions may have changed during the async synth — re-check before play.
     if (src == null || _musicHandle != null || !_musicShouldPlay ||
-        !_enabledMusic.contains(id)) {
+        !_activePool.contains(id)) {
       return;
     }
     final h = _soloud.play(src, volume: 0, looping: true);

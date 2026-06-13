@@ -47,6 +47,7 @@ lib/
   quantum_service.dart Persisted Quantum-mode config (chosen types, normal, timed)
   settings_screen.dart SettingsScreen — audio (music picker + volumes + sound) + About/credits
   stats_service.dart Lifetime gameplay counters (solved/perfect/per-mechanic) → achievements
+  achievement_service.dart Shared achievement defs (kAchievements) + track-unlock map (kTrackUnlock) + unlock computation
   achievements_screen.dart AchievementsScreen (🏆 on Home) — achievements + mechanics progression
 test/
   widget_test.dart   Engine + medal/streak/freeze unit tests
@@ -142,8 +143,12 @@ through a global Freeverb send for a cosmic space:
   Settings; the master **mute** (home/pause/Settings) still kills everything.
   **Backgrounding:** `AudioService` is a `WidgetsBindingObserver` —
   `didChangeAppLifecycleState` `setPause`s the pad + music handles on paused/hidden,
-  resumes on resumed. **Future hook:** tracks could be unlock-gated (achievement /
-  premium) — gate `kMusicTracks` entries in the Settings checklist. Catalogue =
+  resumes on resumed. **Unlock-gated (shipped):** each track unlocks via an
+  achievement (`kTrackUnlock` in `achievement_service.dart`; `bach_prelude` is free).
+  The effective rotation pool is `enabled ∩ unlocked` — `AudioService.setUnlockedMusic`
+  is pushed from `main()`/home/settings (`AchievementService.unlockedTracks`); Settings
+  renders locked tracks with their requirement + progress. **Default music volume is
+  50%** on first launch. Catalogue =
   `kMusicTracks` (`MusicTrack` id→title→composer),
   each id mapped to a builder in `_pieceFor`. Per-piece voice envelope on
   `_MusicPiece` (melody/bass decay + ring): plucky music-box (Bach) vs legato
@@ -212,9 +217,10 @@ and must stay in sync:
   the diamond's outer corners map outside the grid → ignored.
 Persisted like mute (`ThemeService.penrose`, key `penrose_theme`), loaded in
 `main()`, toggled by the diamond icon on the home screen (top-right, left of
-mute). Forward-looking: this is the hook an **unlockable perk** (via play or
-monetization, TBD) would gate — flip `ThemeService.setPenrose` from wherever the
-unlock lands.
+mute). **Unlock-gated (shipped):** the toggle is locked until the player unlocks
+**Hard Entropy** — the *Event Horizon* achievement (reach Medium Lv 16). The home
+screen shows a lock + hint when not yet earned, and revokes the skin (`setPenrose(false)`)
+if it's no longer earned (thematically apt: Penrose diagrams depict event horizons).
 
 **Syntropy mode (`lib/quantum_setup.dart`, `lib/quantum_service.dart`).** Displayed to
 players as **SYNTROPY** (the order-from-disorder counterpart to Entropy mode; renamed

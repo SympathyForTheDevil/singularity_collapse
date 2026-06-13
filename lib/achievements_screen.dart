@@ -1,35 +1,11 @@
-import 'dart:math';
 import 'package:flutter/material.dart';
+import 'achievement_service.dart';
 import 'audio.dart';
-import 'daily_service.dart';
 import 'field_guide.dart';
-import 'progress_service.dart';
 import 'puzzle_model.dart';
-import 'stats_service.dart';
 
-/// One achievement: reach [target] of the merged value keyed by [stat].
-class _Ach {
-  final String name, desc, icon, stat;
-  final int target;
-  const _Ach(this.name, this.desc, this.icon, this.stat, this.target);
-}
-
-const List<_Ach> _kAch = [
-  _Ach('Apprentice',          'Collapse 10 regions',              'worldline',  'solved',     10),
-  _Ach('Adept',               'Collapse 50 regions',              'worldline',  'solved',     50),
-  _Ach('Puzzle Master',       'Collapse 200 regions',             'blackhole',  'solved',     200),
-  _Ach('Grandmaster',         'Collapse 500 regions',             'blackhole',  'solved',     500),
-  _Ach('Laplace\'s Demon',    '50 flawless solves (no backtrack)','worldline',  'perfect',    50),
-  _Ach('Explorer',            'Discover all five mechanics',      'objects',    'mechanics',  5),
-  _Ach('Less Than 12 Parsecs','Clear 25 wormhole regions',        'wormhole',   'wormhole',   25),
-  _Ach('Locksmith',           'Clear 25 mass-gate regions',       'gate',       'gate',       25),
-  _Ach('Slingshot',           'Clear 25 gravity-well regions',    'well',       'well',       25),
-  _Ach('Spooky Action',       'Measure 25 entangled regions',     'entangled',  'entangled',  25),
-  _Ach('Many Worlds',         'Traverse 25 multiverse regions',   'multiverse', 'multiverse', 25),
-  _Ach('Maxwell\'s Demon',    'Reach Entropy Lv 20',              'entropy',    'entropy',    20),
-  _Ach('Dedicated',           'A 7-day daily streak',             'syntropy',   'streak',     7),
-  _Ach('Devoted',             'A 30-day daily streak',            'syntropy',   'streak',     30),
-];
+// Achievement definitions (kAchievements) live in achievement_service.dart — shared
+// with the music-unlock gates and the Penrose-skin unlock. This screen renders them.
 
 /// The five mechanics in unlock order: (seenKey, label, iconId, gate level).
 const List<(String, String, String, int)> _kMechanics = [
@@ -65,30 +41,20 @@ class _AchievementsScreenState extends State<AchievementsScreen> {
   }
 
   Future<void> _load() async {
-    final stats = await StatsService.all();
-    final seen  = await GuideService.seen();
-    final mech  = _kMechanics.where((m) => seen.contains(m.$1)).length;
-    var entLevel = 0;
-    for (final d in ['easy', 'medium', 'hard']) {
-      entLevel = max(entLevel, await ProgressService.bestLevel(d));
-    }
-    final streak = await DailyService.getMaxStreak();
+    final values = await AchievementService.values();
+    final seen   = await GuideService.seen();
     if (!mounted) return;
     setState(() {
       _seen = seen;
-      _values = {
-        ...stats,
-        'mechanics': mech,
-        'entropy': entLevel,
-        'streak': streak,
-      };
+      _values = values;
       _loaded = true;
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    final unlocked = _kAch.where((a) => (_values[a.stat] ?? 0) >= a.target).length;
+    final unlocked = kAchievements
+        .where((a) => AchievementService.isUnlocked(a, _values)).length;
     return Scaffold(
       backgroundColor: const Color(0xff04050a),
       body: SafeArea(
@@ -133,9 +99,9 @@ class _AchievementsScreenState extends State<AchievementsScreen> {
                     children: [
                       _mechanicsSection(),
                       const SizedBox(height: 26),
-                      _sectionLabel('ACHIEVEMENTS  ·  $unlocked / ${_kAch.length}'),
+                      _sectionLabel('ACHIEVEMENTS  ·  $unlocked / ${kAchievements.length}'),
                       const SizedBox(height: 12),
-                      for (final a in _kAch) _achRow(a),
+                      for (final a in kAchievements) _achRow(a),
                     ],
                   ),
             ),
@@ -200,9 +166,9 @@ class _AchievementsScreenState extends State<AchievementsScreen> {
   }
 
   // ── One achievement row ─────────────────────────────────────────────────────
-  Widget _achRow(_Ach a) {
+  Widget _achRow(Achievement a) {
     final cur  = _values[a.stat] ?? 0;
-    final done = cur >= a.target;
+    final done = AchievementService.isUnlocked(a, _values);
     final frac = (cur / a.target).clamp(0.0, 1.0);
     final accent = done ? _gold : _purple;
     return Container(

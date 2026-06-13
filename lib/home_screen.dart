@@ -1,6 +1,7 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'achievement_service.dart';
 import 'achievements_screen.dart';
 import 'audio.dart';
 import 'daily_service.dart';
@@ -77,12 +78,19 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       RunDifficulty.medium => (maxLvl[RunDifficulty.easy]   ?? 0) >= _kUnlockLevel,
       RunDifficulty.hard   => (maxLvl[RunDifficulty.medium] ?? 0) >= _kUnlockLevel,
     };
+    // Unlocks may have changed since the last visit: refresh the music rotation and
+    // revoke the Penrose skin if Hard isn't earned (it's gated behind unlocking Hard).
+    AudioService.instance.setUnlockedMusic(await AchievementService.unlockedTracks());
+    if (!unlocked(RunDifficulty.hard) && ThemeService.penrose) {
+      await ThemeService.setPenrose(false);
+    }
     if (mounted) {
       setState(() {
         _solvedToday = solved; _streak = streak;
         // Fall back to Easy if the remembered difficulty is still locked.
         _entropyDiff = unlocked(diff) ? diff : RunDifficulty.easy;
         _entropyBest = best; _maxLevel = maxLvl; _onboarded = onboarded;
+        _penrose = ThemeService.penrose;
         _loaded = true;
       });
     }
@@ -125,10 +133,33 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     AudioService.instance.ui();   // audible only when now un-muted — a confirm
   }
 
+  /// Penrose is gated behind unlocking Hard Entropy (reach Medium Lv $_kUnlockLevel) —
+  /// i.e. the Event Horizon achievement.
+  bool get _penroseUnlocked => _diffUnlocked(RunDifficulty.hard);
+
   Future<void> _togglePenrose() async {
+    if (!_penroseUnlocked) {
+      AudioService.instance.denied();
+      _showLockedSnack(
+        'Penrose skin · unlock Hard Entropy (reach Medium Lv $_kUnlockLevel).');
+      return;
+    }
     AudioService.instance.ui();
     await ThemeService.setPenrose(!_penrose);
     if (mounted) setState(() => _penrose = ThemeService.penrose);
+  }
+
+  void _showLockedSnack(String msg) {
+    final m = ScaffoldMessenger.of(context);
+    m.clearSnackBars();
+    m.showSnackBar(SnackBar(
+      content: Text(msg,
+        style: const TextStyle(
+          color: Color(0xffcfe3f2), fontSize: 11, fontFamily: 'monospace')),
+      backgroundColor: const Color(0xff0a1018),
+      behavior: SnackBarBehavior.floating,
+      duration: const Duration(milliseconds: 2200),
+    ));
   }
 
   Future<void> _goSettings() async {
@@ -233,13 +264,17 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                       color: _penrose ? _purple : const Color(0xff223344),
                       width: 1),
                   ),
-                  // A tilted square = the 45° diamond board it produces.
-                  child: Transform.rotate(
-                    angle: pi / 4,
-                    child: Icon(Icons.crop_square_rounded,
-                      color: _penrose ? _purple : const Color(0xff35485a),
-                      size: 18),
-                  ),
+                  // A tilted square = the 45° diamond board it produces; a lock
+                  // until Hard Entropy (the Event Horizon achievement) is earned.
+                  child: _penroseUnlocked
+                    ? Transform.rotate(
+                        angle: pi / 4,
+                        child: Icon(Icons.crop_square_rounded,
+                          color: _penrose ? _purple : const Color(0xff35485a),
+                          size: 18),
+                      )
+                    : const Icon(Icons.lock_rounded,
+                        color: Color(0xff35485a), size: 16),
                 ),
               ),
             ),
