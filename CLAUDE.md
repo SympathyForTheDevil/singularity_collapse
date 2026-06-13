@@ -558,9 +558,16 @@ licenses); the **app icon**.
 **Before launch (tracked in `LAUNCH.md`):**
 - ✅ **Store name** = **"Singularity: Collapse"** (clear on both stores;
   `singularitycollapse.com` registered). In-app wordmark stays "SINGULARITY".
-- ☐ **Monetization (Phase 3)** — model = **free + rewarded ads (AdMob) + a Premium /
-  Remove-Ads IAP**; `PremiumService` + IAP/ads plumbing **not built yet**. Ads add
-  privacy-disclosure work (ATT, UMP consent, data-safety) — see LAUNCH.md.
+- ◐ **Monetization (Phase 3)** — model = **free + rewarded ads (AdMob) + a Premium IAP**.
+  **Scaffold built + testable** (`PremiumService`): one-time Premium entitlement (dev
+  toggle in Settings → DEVELOPER·TESTING now; real IAP later) = **unlimited
+  hints/solutions + ad-free + the Syntropy full picker**; free tier = **5 hints + 2
+  solutions per UTC day**, each topped up by a **rewarded ad** (+5 / +1). The paywall
+  sheet, the hint/solution gating, the Syntropy picker gate, and the day-rollover are
+  real; the **ad and IAP are stubbed** (grant directly / flip the flag). Penrose + music
+  are **not** premium (they unlock free via achievements). **Wire-up pending:**
+  `google_mobile_ads` rewarded ad, `in_app_purchase` (+restore), store-side IAP/AdMob
+  setup, and the ads privacy work (ATT, UMP consent, data-safety) — see LAUNCH.md.
 - ✅ **Website — LIVE** (2026-06-13) at `https://singularitycollapse.com` (+ `/privacy`,
   `/support`, valid HTTPS) — static site on GitHub Pages, repo
   `SympathyForTheDevil/singularitycollapse-site`, custom domain via Namecheap DNS. Matches
@@ -570,7 +577,8 @@ licenses); the **app icon**.
   are **manual** from the Codemagic UI. Signing uses a persistent RSA key in the secure
   Codemagic env var `CERTIFICATE_PRIVATE_KEY` (group `appstore_credentials`); the
   implicit `ios_signing` block fails on a brand-new app — see `IOS_TESTFLIGHT.md` step 8.
-- ☐ **Polish** — gate/remove the `· dev ·` menu for production; finish the **readability
+- ☐ **Polish** — gate/remove the `· dev ·` menu **and the Settings DEVELOPER·TESTING
+  section** (premium toggle / reset limits) for production; finish the **readability
   pass** (Settings/Streak/Field Guide/in-game HUD/overlays — home done); switch the Play
   artifact to **AAB**; on-device tuning confirmation (entropy feel, multiverse, entangled).
 - ◐ **Support email:** `support@singularitycollapse.com` (in `settings_screen.dart`) is the

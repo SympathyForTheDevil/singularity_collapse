@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'achievement_service.dart';
 import 'audio.dart';
+import 'premium_service.dart';
 
 /// Settings — the home for audio options (and room to grow: themes…). Master
 /// sound on/off, separate SFX + music volume sliders, and the song checklist that
@@ -25,6 +26,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   late Set<String> _enabled;
   late Set<String> _unlocked;              // track ids the player has unlocked
   Map<String, int> _achValues = const {};  // achievement progress, for lock labels
+  late bool _premium;                      // dev/testing entitlement toggle
 
   @override
   void initState() {
@@ -35,8 +37,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _musicVol = a.musicVolume;
     _enabled  = {...a.enabledMusic};
     _unlocked = {...a.unlockedMusic};       // best-guess; refreshed by _loadUnlocks
+    _premium  = PremiumService.premium;
     a.enterMusicContext();   // preview the rotation while on this screen
     _loadUnlocks();
+  }
+
+  Future<void> _togglePremium() async {
+    await PremiumService.setPremium(!_premium);
+    AudioService.instance.ui();
+    if (mounted) setState(() => _premium = PremiumService.premium);
+  }
+
+  Future<void> _resetLimits() async {
+    await PremiumService.resetDailyLimits();
+    AudioService.instance.ui();
+    if (!mounted) return;
+    setState(() {});
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+      content: Text("Today's hint/solution limits reset",
+        style: TextStyle(fontFamily: 'monospace', letterSpacing: 1)),
+      duration: Duration(seconds: 2),
+      backgroundColor: Color(0xff0a1018),
+    ));
   }
 
   Future<void> _loadUnlocks() async {
@@ -146,6 +168,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   for (final t in kMusicTracks) _trackTile(t),
 
                   const SizedBox(height: 28),
+                  _sectionLabel('DEVELOPER · TESTING'),
+                  const SizedBox(height: 4),
+                  const Text('for testers — gated out of production builds',
+                    style: TextStyle(
+                      color: Color(0xff6688aa), fontSize: 9.5,
+                      fontFamily: 'monospace', letterSpacing: 1)),
+                  const SizedBox(height: 12),
+                  _premiumToggle(),
+                  const SizedBox(height: 12),
+                  _resetLimitsRow(),
+
+                  const SizedBox(height: 28),
                   _sectionLabel('ABOUT'),
                   const SizedBox(height: 12),
                   _aboutPanel(),
@@ -237,6 +271,67 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
             const Icon(Icons.chevron_right_rounded,
               color: Color(0xff5a7488), size: 18),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Dev/testing: flip the Premium entitlement so testers can exercise the gated
+  /// Syntropy picker + unlimited assists (and back, to test the free caps/paywall).
+  Widget _premiumToggle() {
+    final on = _premium;
+    return GestureDetector(
+      onTap: _togglePremium,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        decoration: BoxDecoration(
+          color: _panel,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: on ? _gold.withValues(alpha: 0.7) : _border,
+            width: on ? 1.5 : 1),
+        ),
+        child: Row(
+          children: [
+            Icon(on ? Icons.auto_awesome : Icons.auto_awesome_outlined,
+              color: on ? _gold : const Color(0xff35485a), size: 22),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Text('PREMIUM',
+                style: TextStyle(
+                  color: on ? Colors.white : const Color(0xff8aa6bc),
+                  fontSize: 13, fontFamily: 'monospace',
+                  fontWeight: FontWeight.bold, letterSpacing: 2))),
+            Text(on ? 'ON' : 'OFF',
+              style: TextStyle(
+                color: on ? _gold : const Color(0xff556a7e),
+                fontSize: 12, fontFamily: 'monospace',
+                fontWeight: FontWeight.bold, letterSpacing: 2)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _resetLimitsRow() {
+    return GestureDetector(
+      onTap: _resetLimits,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          color: _panel,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: _border),
+        ),
+        child: const Row(
+          children: [
+            Icon(Icons.restart_alt, color: Color(0xff7799aa), size: 20),
+            SizedBox(width: 14),
+            Expanded(
+              child: Text("RESET TODAY'S LIMITS",
+                style: TextStyle(
+                  color: Color(0xff8aa6bc), fontSize: 13, fontFamily: 'monospace',
+                  fontWeight: FontWeight.bold, letterSpacing: 2))),
           ],
         ),
       ),

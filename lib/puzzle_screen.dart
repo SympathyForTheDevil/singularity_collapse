@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'achievement_service.dart';
 import 'audio.dart';
 import 'cosmic.dart';
+import 'premium_service.dart';
 import 'daily_service.dart';
 import 'field_guide.dart';
 import 'progress_service.dart';
@@ -874,6 +875,13 @@ class _PuzzleScreenState extends State<PuzzleScreen>
   /// "show solution" later. Does not change the puzzle state — just an overlay.
   void _toggleSolution() {
     if (solved) return;
+    if (!_showSolution) {                         // about to REVEAL → gate + consume
+      if (!PremiumService.canSolution) {
+        _showAssistPaywall(isHint: false);
+        return;
+      }
+      PremiumService.useSolution();
+    }
     AudioService.instance.ui();
     setState(() => _showSolution = !_showSolution);
     if (_showSolution) {
@@ -892,11 +900,12 @@ class _PuzzleScreenState extends State<PuzzleScreen>
   /// A premium hook: gate count/availability behind an entitlement later.
   void _showHintSteps() {
     if (solved) return;
-    AudioService.instance.ui();
     if (_hintTarget != null) {            // already showing → dismiss (no charge)
+      AudioService.instance.ui();
       setState(_clearHint);
       return;
     }
+    // Work out whether a hint is actually available — read-only, no mutation yet.
     final sol = grid.solution;
     // Longest prefix of the player's path that still matches the solution.
     var m = 0;
@@ -907,7 +916,16 @@ class _PuzzleScreenState extends State<PuzzleScreen>
     // (well launch / wormhole / bridge) that t would otherwise split.
     var t = m;
     _atomic.forEach((s, len) { if (t > s && t < s + len) t = s; });
-    if (t < 1 || t >= sol.length) return; // already correct to the end
+    if (t < 1 || t >= sol.length) {       // already correct to the end → nothing to give
+      AudioService.instance.ui();
+      return;
+    }
+    // A real hint is available → gate it behind today's allowance / Premium.
+    if (!PremiumService.canHint) {
+      _showAssistPaywall(isHint: true);
+      return;
+    }
+    AudioService.instance.ui();
     // Erase the stray part of the worldline back to the last correct cell.
     if (path.length > t) {
       path.removeRange(t, path.length);
@@ -922,8 +940,110 @@ class _PuzzleScreenState extends State<PuzzleScreen>
     _hintTarget = next;                   // lock stepping to this cell until taken
     _peeked = true;                       // a hint forfeits the UNAIDED badge
     _addEntropy(_ent().hint);             // free on Easy · half on Medium · full on Hard
+    PremiumService.useHint();             // consume one of today's hints
     HapticFeedback.selectionClick();
     setState(() {});
+  }
+
+  /// Out of free hints/solutions → offer a rewarded ad top-up or the Premium
+  /// unlock. **Stubbed for testing:** the ad grants instantly and Premium flips a
+  /// dev flag; the real google_mobile_ads / in_app_purchase calls slot in behind
+  /// these same two buttons (see [PremiumService]). On either, we retry the action.
+  void _showAssistPaywall({required bool isHint}) {
+    AudioService.instance.ui();
+    HapticFeedback.lightImpact();
+    const purple = Color(0xffbb55ff);
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xff0a1018),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.fromLTRB(22, 20, 22, 30),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(isHint ? 'OUT OF HINTS TODAY' : 'OUT OF SOLUTIONS TODAY',
+              style: const TextStyle(
+                color: Colors.white, fontSize: 15, fontFamily: 'monospace',
+                fontWeight: FontWeight.bold, letterSpacing: 2)),
+            const SizedBox(height: 8),
+            Text(
+              isHint
+                ? 'You get ${PremiumService.freeHintsPerDay} free hints a day.'
+                : 'You get ${PremiumService.freeSolutionsPerDay} free solutions a day.',
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: Color(0xff8aa6bc), fontSize: 12, fontFamily: 'monospace')),
+            const SizedBox(height: 20),
+            _paywallBtn(
+              Icons.play_circle_outline,
+              isHint
+                ? 'WATCH AD  ·  +${PremiumService.adHintGrant} HINTS'
+                : 'WATCH AD  ·  +${PremiumService.adSolutionGrant} SOLUTION',
+              _accent,
+              () async {
+                Navigator.pop(ctx);
+                // STUB: real rewarded ad → grant on the reward callback.
+                if (isHint) {
+                  await PremiumService.grantAdHints();
+                } else {
+                  await PremiumService.grantAdSolution();
+                }
+                if (!mounted) return;
+                setState(() {});
+                isHint ? _showHintSteps() : _toggleSolution();
+              }),
+            const SizedBox(height: 10),
+            _paywallBtn(
+              Icons.auto_awesome,
+              'UNLOCK PREMIUM  ·  UNLIMITED',
+              purple,
+              () async {
+                Navigator.pop(ctx);
+                // STUB: real in_app_purchase flow → setPremium(true) on success.
+                await PremiumService.setPremium(true);
+                if (!mounted) return;
+                setState(() {});
+                isHint ? _showHintSteps() : _toggleSolution();
+              }),
+            const SizedBox(height: 8),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('NOT NOW',
+                style: TextStyle(
+                  color: Color(0xff556a7e), fontSize: 12, fontFamily: 'monospace',
+                  fontWeight: FontWeight.bold, letterSpacing: 2))),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _paywallBtn(IconData icon, String label, Color color, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(vertical: 15),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.10),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: color, width: 1.5),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, color: color, size: 18),
+            const SizedBox(width: 10),
+            Text(label,
+              style: TextStyle(
+                color: color, fontSize: 12.5, fontFamily: 'monospace',
+                fontWeight: FontWeight.bold, letterSpacing: 1.5)),
+          ],
+        ),
+      ),
+    );
   }
 
   void _onSolved() {
@@ -1207,11 +1327,15 @@ class _PuzzleScreenState extends State<PuzzleScreen>
                       _ctrlBtn(Icons.refresh, 'RESET', _reset,
                         enabled: !solved && path.length > 1),
                       _ctrlBtn(Icons.lightbulb_outline, 'HINT', _showHintSteps,
-                        enabled: !solved, active: _hintCells.isNotEmpty),
+                        enabled: !solved, active: _hintCells.isNotEmpty,
+                        note: PremiumService.premium
+                          ? '∞' : '${PremiumService.hintsLeft}'),
                       _ctrlBtn(
                         _showSolution ? Icons.visibility : Icons.visibility_outlined,
                         'SOLUTION', _toggleSolution,
-                        enabled: !solved, active: _showSolution),
+                        enabled: !solved, active: _showSolution,
+                        note: PremiumService.premium
+                          ? '∞' : '${PremiumService.solutionsLeft}'),
                     ],
                   ),
                 ),
@@ -1682,7 +1806,7 @@ class _PuzzleScreenState extends State<PuzzleScreen>
 
   /// Larger labelled control for the lower bar (undo / reset).
   Widget _ctrlBtn(IconData icon, String label, VoidCallback onTap,
-      {bool enabled = true, bool active = false}) {
+      {bool enabled = true, bool active = false, String? note}) {
     final c = active
         ? _accent
         : Color(enabled ? 0xff7799aa : 0xff35485a);
@@ -1708,6 +1832,13 @@ class _PuzzleScreenState extends State<PuzzleScreen>
               style: TextStyle(
                 color: c, fontSize: 12, fontFamily: 'monospace',
                 fontWeight: FontWeight.bold, letterSpacing: 1.5)),
+            if (note != null) ...[
+              const SizedBox(width: 6),
+              Text(note,
+                style: TextStyle(
+                  color: c.withValues(alpha: 0.6), fontSize: 11,
+                  fontFamily: 'monospace', fontWeight: FontWeight.bold)),
+            ],
           ],
         ),
       ),

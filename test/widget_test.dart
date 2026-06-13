@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:singularity_collapse/achievement_service.dart';
 import 'package:singularity_collapse/audio.dart';
 import 'package:singularity_collapse/daily_service.dart';
+import 'package:singularity_collapse/premium_service.dart';
 import 'package:singularity_collapse/progress_service.dart';
 import 'package:singularity_collapse/puzzle_model.dart';
 
@@ -390,5 +391,67 @@ void main() {
     // Event Horizon is also the Penrose-skin gate (home reads the same condition).
     expect((await AchievementService.unlockedIds()).contains('event_horizon'), isTrue);
     expect((await AchievementService.unlockedTracks()).contains('toccata_techno'), isTrue);
+  });
+
+  group('PremiumService daily assist allowances', () {
+    test('fresh player: free caps, not premium', () async {
+      SharedPreferences.setMockInitialValues({});
+      await PremiumService.load();
+      expect(PremiumService.premium, isFalse);
+      expect(PremiumService.canHint, isTrue);
+      expect(PremiumService.hintsLeft, PremiumService.freeHintsPerDay);
+      expect(PremiumService.solutionsLeft, PremiumService.freeSolutionsPerDay);
+    });
+
+    test('hints deplete, then a rewarded ad tops them up', () async {
+      SharedPreferences.setMockInitialValues({});
+      await PremiumService.load();
+      for (var i = 0; i < PremiumService.freeHintsPerDay; i++) {
+        expect(PremiumService.canHint, isTrue);
+        await PremiumService.useHint();
+      }
+      expect(PremiumService.canHint, isFalse);
+      expect(PremiumService.hintsLeft, 0);
+      await PremiumService.grantAdHints();
+      expect(PremiumService.canHint, isTrue);
+      expect(PremiumService.hintsLeft, PremiumService.adHintGrant);
+    });
+
+    test('solutions deplete, then a rewarded ad tops them up', () async {
+      SharedPreferences.setMockInitialValues({});
+      await PremiumService.load();
+      for (var i = 0; i < PremiumService.freeSolutionsPerDay; i++) {
+        await PremiumService.useSolution();
+      }
+      expect(PremiumService.canSolution, isFalse);
+      await PremiumService.grantAdSolution();
+      expect(PremiumService.canSolution, isTrue);
+      expect(PremiumService.solutionsLeft, PremiumService.adSolutionGrant);
+    });
+
+    test('premium overrides all caps (unlimited)', () async {
+      SharedPreferences.setMockInitialValues({});
+      await PremiumService.load();
+      for (var i = 0; i < 20; i++) {
+        await PremiumService.useHint();
+        await PremiumService.useSolution();
+      }
+      await PremiumService.setPremium(true);
+      expect(PremiumService.canHint, isTrue);
+      expect(PremiumService.canSolution, isTrue);
+      expect(PremiumService.hintsLeft, -1);
+      expect(PremiumService.solutionsLeft, -1);
+    });
+
+    test('counters reset on the UTC day rollover', () async {
+      SharedPreferences.setMockInitialValues({
+        'assist_day': '2000-01-01',        // a stale day → load() rolls it over
+        'assist_hints_used': 99,
+        'assist_sols_used': 99,
+      });
+      await PremiumService.load();
+      expect(PremiumService.hintsLeft, PremiumService.freeHintsPerDay);
+      expect(PremiumService.solutionsLeft, PremiumService.freeSolutionsPerDay);
+    });
   });
 }

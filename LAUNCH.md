@@ -53,9 +53,14 @@ Legend: ☐ todo · ◐ in progress · ✅ done
   adding Crashlytics/Sentry in a later update if wanted.
 
 ### B. Monetization (Phase 3) — model chosen: **Free + rewarded ads + IAP**
-- ☐ **`PremiumService`** — persisted entitlement flag (dev toggle now; store purchase
-  later). Restore-purchases support. Premium = removes ads + unlocks Syntropy full
-  picker / Penrose theme / unlimited hints.
+- ◐ **`PremiumService` — scaffold built + testable.** Persisted entitlement (dev toggle
+  in Settings → DEVELOPER·TESTING now; real IAP later). Premium = **unlimited
+  hints/solutions + ad-free + the Syntropy full picker**. Free = **5 hints + 2 solutions /
+  UTC day**, topped up +5 / +1 by a rewarded ad. The paywall sheet, the hint/solution
+  gating, the Syntropy picker gate, and the daily UTC rollover are real; the **ad + IAP
+  are stubbed** (grant directly / flip the flag). Penrose + music are **not** premium
+  (they unlock free via achievements). Restore-purchases lands with the real IAP. ⚠ The
+  dev Premium toggle + "reset limits" must be gated/removed for production.
 - ☐ **Rewarded ads** via **`google_mobile_ads`** (AdMob): e.g. watch an ad to earn a
   hint or an extra daily replay. Free tier stays fully playable without ever watching.
 - ☐ **`in_app_purchase` plumbing** — a "Premium / Remove Ads" product across both

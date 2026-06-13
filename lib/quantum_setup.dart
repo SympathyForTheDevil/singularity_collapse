@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'audio.dart';
 import 'field_guide.dart';
+import 'premium_service.dart';
 import 'puzzle_model.dart';
 import 'puzzle_screen.dart';
 import 'quantum_service.dart';
@@ -42,6 +43,7 @@ class _QuantumSetupScreenState extends State<QuantumSetupScreen> {
   late bool _normal;
   late bool _timed;
   bool _loaded = false;
+  bool _premium = PremiumService.premium;   // gates the custom picker + timed mode
 
   @override
   void initState() {
@@ -53,9 +55,15 @@ class _QuantumSetupScreenState extends State<QuantumSetupScreen> {
       if (!mounted) return;
       setState(() {
         _seen = s;
-        // First time (nothing chosen yet) → pre-select every unlocked type for a
-        // rich default session; the player can pare it down.
-        if (_features.isEmpty) {
+        if (!_premium) {
+          // Free tier: a basic preset — plain Normal boards, relaxed. Premium
+          // unlocks choosing specific mechanics and the timed toggle.
+          _features = {};
+          _normal   = true;
+          _timed    = false;
+        } else if (_features.isEmpty) {
+          // First time (nothing chosen yet) → pre-select every unlocked type for a
+          // rich default session; the player can pare it down.
           for (final t in _kTypes) {
             if (t.feature != null && s.contains(t.seenKey)) _features.add(t.feature!);
           }
@@ -72,6 +80,7 @@ class _QuantumSetupScreenState extends State<QuantumSetupScreen> {
 
   void _toggle(_QType t) {
     if (!_unlocked(t)) return;
+    if (!_premium) { _showPremiumPrompt(); return; }   // customizing is Premium
     AudioService.instance.ui();
     setState(() {
       if (t.feature == null) {
@@ -149,16 +158,20 @@ class _QuantumSetupScreenState extends State<QuantumSetupScreen> {
                   fontFamily: 'monospace', letterSpacing: 1)),
             ),
 
+            if (!_premium) _premiumBanner(),
+
             // Timed / Relaxed toggle
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 4, 16, 10),
               child: Row(
                 children: [
                   Expanded(child: _modeChip('RELAXED', !_timed, _cyan,
-                    () { AudioService.instance.ui(); setState(() => _timed = false); })),
+                    () { if (!_premium) { _showPremiumPrompt(); return; }
+                         AudioService.instance.ui(); setState(() => _timed = false); })),
                   const SizedBox(width: 10),
                   Expanded(child: _modeChip('TIMED', _timed, _gold,
-                    () { AudioService.instance.ui(); setState(() => _timed = true); })),
+                    () { if (!_premium) { _showPremiumPrompt(); return; }
+                         AudioService.instance.ui(); setState(() => _timed = true); })),
                 ],
               ),
             ),
@@ -201,6 +214,115 @@ class _QuantumSetupScreenState extends State<QuantumSetupScreen> {
                 ),
               ),
             ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Free-tier banner: the picker + timed mode are Premium. Tap to unlock.
+  Widget _premiumBanner() => Padding(
+    padding: const EdgeInsets.fromLTRB(16, 2, 16, 8),
+    child: GestureDetector(
+      onTap: _showPremiumPrompt,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          color: _purple.withValues(alpha: 0.10),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: _purple.withValues(alpha: 0.6), width: 1.2),
+        ),
+        child: const Row(
+          children: [
+            Icon(Icons.auto_awesome, color: _purple, size: 18),
+            SizedBox(width: 10),
+            Expanded(
+              child: Text('PREMIUM · custom picker + timed mode',
+                style: TextStyle(
+                  color: Color(0xffd8b8ff), fontSize: 11, fontFamily: 'monospace',
+                  fontWeight: FontWeight.bold, letterSpacing: 1))),
+            Text('UNLOCK',
+              style: TextStyle(
+                color: _purple, fontSize: 11, fontFamily: 'monospace',
+                fontWeight: FontWeight.bold, letterSpacing: 1.5)),
+          ],
+        ),
+      ),
+    ),
+  );
+
+  /// Premium upsell for the Syntropy picker. **Stubbed:** flips the dev entitlement
+  /// flag; the real in_app_purchase flow slots in behind this same button.
+  void _showPremiumPrompt() {
+    AudioService.instance.ui();
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xff0a1018),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.fromLTRB(22, 20, 22, 30),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('SYNTROPY PREMIUM',
+              style: TextStyle(
+                color: Colors.white, fontSize: 15, fontFamily: 'monospace',
+                fontWeight: FontWeight.bold, letterSpacing: 2)),
+            const SizedBox(height: 8),
+            const Text(
+              'Choose exactly which mechanics appear and play TIMED runs — '
+              'plus unlimited hints/solutions and no ads.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: Color(0xff8aa6bc), fontSize: 12,
+                fontFamily: 'monospace', height: 1.5)),
+            const SizedBox(height: 20),
+            GestureDetector(
+              onTap: () async {
+                Navigator.pop(ctx);
+                // STUB: real in_app_purchase flow → setPremium(true) on success.
+                await PremiumService.setPremium(true);
+                if (!mounted) return;
+                setState(() {
+                  _premium = true;
+                  if (_features.isEmpty) {     // populate the now-unlocked picker
+                    for (final t in _kTypes) {
+                      if (t.feature != null && _seen.contains(t.seenKey)) {
+                        _features.add(t.feature!);
+                      }
+                    }
+                  }
+                });
+              },
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 15),
+                decoration: BoxDecoration(
+                  color: _purple.withValues(alpha: 0.10),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: _purple, width: 1.5),
+                ),
+                child: const Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.auto_awesome, color: _purple, size: 18),
+                    SizedBox(width: 10),
+                    Text('UNLOCK PREMIUM',
+                      style: TextStyle(
+                        color: _purple, fontSize: 12.5, fontFamily: 'monospace',
+                        fontWeight: FontWeight.bold, letterSpacing: 1.5)),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('NOT NOW',
+                style: TextStyle(
+                  color: Color(0xff556a7e), fontSize: 12, fontFamily: 'monospace',
+                  fontWeight: FontWeight.bold, letterSpacing: 2))),
           ],
         ),
       ),
