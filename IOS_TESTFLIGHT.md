@@ -6,6 +6,11 @@ contains the build config (`codemagic.yaml`) and the export-compliance plist key
 
 Bundle ID (already set, never changes): **`com.sympathyforthedevil.singularityCollapse`**
 
+> ✅ **LIVE as of 2026-06-12** — the first signed build built, uploaded, and installed
+> via TestFlight (Apple ID `6779779848`, API key `CodemagicAppStore` / App Manager role).
+> Builds are **manual** (start from the Codemagic UI). The one non-obvious gotcha was
+> code signing on a brand-new app — see the **Signing** note under step 8.
+
 Legend: ☐ to do · ✅ done
 
 ---
@@ -58,9 +63,23 @@ repositories"). You can revoke this anytime at GitHub → Settings → Applicati
 - `integrations.app_store_connect:` → your key name from step 7 (`CodemagicAppStore`).
 - `APP_STORE_APPLE_ID:` → the numeric Apple ID from step 1.
 
-> Signing is **automatic**: with the API key + the `ios_signing` block, Codemagic
-> creates the distribution certificate + provisioning profile in *your* Apple account
-> on the first build. No manual cert handling.
+> **Signing — the one non-obvious step (do this before the first build).** The
+> implicit `ios_signing` block does *not* work for a brand-new app: it only *fetches*
+> existing signing files, and `--create` cannot mint the first distribution
+> certificate without a private key to base it on (you'll hit "No matching profiles
+> found" / "Cannot save Signing Certificates without certificate private key"). The
+> fix, already in `codemagic.yaml`:
+> 1. Generate an RSA key once: `openssl genrsa -out cert_key.pem 2048` (backup kept at
+>    `~/collapse-signing/codemagic_cert_key.pem`).
+> 2. In Codemagic → your app → **Environment variables**, add it as a **Secure** var
+>    named **`CERTIFICATE_PRIVATE_KEY`** in the group **`appstore_credentials`** (paste
+>    the whole `-----BEGIN/END PRIVATE KEY-----` block).
+>
+> The workflow's `fetch-signing-files --type IOS_APP_STORE --create
+> --certificate-key=@env:CERTIFICATE_PRIVATE_KEY` then mints the certificate + App
+> Store profile from that key on the first build and **reuses the same cert on every
+> later build** (no certificate churn, no Apple cert-cap problems). The API key role
+> must be **App Manager** (sufficient — it can create certs/profiles).
 
 ---
 
@@ -76,6 +95,12 @@ build "Processing" for ~5–15 min. (Export compliance won't prompt — the plis
 ☐ **11. Add yourself as an internal tester.** TestFlight → **Internal Testing** → ➕
 group → add your Apple ID (already a user on the account). **Internal builds are
 available immediately — no Beta App Review.**
+
+> **Turn on "Enable Automatic Distribution" for the internal group.** Then every
+> uploaded build auto-distributes to you once Apple finishes processing — no manual
+> per-build step. This also makes Codemagic's `submit_to_testflight` post-processing
+> step irrelevant: that step is *racy* (it can fire before Apple finishes processing
+> and go red), but the build still uploads fine and automatic distribution picks it up.
 
 ☐ **12. Install on your iPhone.** App Store → install **TestFlight** → sign in with
 your Apple ID → the build appears → **Install** → play. 🎉

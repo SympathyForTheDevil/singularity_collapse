@@ -557,9 +557,11 @@ licenses); the **app icon**.
   privacy-disclosure work (ATT, UMP consent, data-safety) — see LAUNCH.md.
 - ☐ **Website** — privacy + support pages must be **live** before ship (the in-app
   About links point to `singularitycollapse.com` + `/privacy`).
-- ◐ **iOS testing** — Codemagic→TestFlight wired (`codemagic.yaml`, `IOS_TESTFLIGHT.md`,
-  `ITSAppUsesNonExemptEncryption=NO`); needs the App Store Connect **API key** + filling
-  the two yaml placeholders (key name `CodemagicAppStore`, numeric `APP_STORE_APPLE_ID`).
+- ✅ **iOS testing — LIVE (2026-06-12)** — Codemagic→TestFlight working; first signed
+  build installed (Apple ID `6779779848`, key `CodemagicAppStore`/App Manager). Builds
+  are **manual** from the Codemagic UI. Signing uses a persistent RSA key in the secure
+  Codemagic env var `CERTIFICATE_PRIVATE_KEY` (group `appstore_credentials`); the
+  implicit `ios_signing` block fails on a brand-new app — see `IOS_TESTFLIGHT.md` step 8.
 - ☐ **Polish** — gate/remove the `· dev ·` menu for production; finish the **readability
   pass** (Settings/Streak/Field Guide/in-game HUD/overlays — home done); switch the Play
   artifact to **AAB**; on-device tuning confirmation (entropy feel, multiverse, entangled).

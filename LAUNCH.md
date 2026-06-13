@@ -31,9 +31,12 @@ Legend: ☐ todo · ◐ in progress · ✅ done
 - ✅ **About/credits** in Settings — version · developer (Adam Ettinger) · website /
   support / privacy links · **open-source licenses** (`showLicensePage` — satisfies the
   OSS notice obligation). ⚠ support email is a placeholder (`support@singularitycollapse.com`).
-- ✅ **iOS TestFlight pipeline wired** — `codemagic.yaml` + `IOS_TESTFLIGHT.md` walkthrough,
-  `ITSAppUsesNonExemptEncryption=NO`. To run it: add the App Store Connect API key + fill
-  the 2 yaml placeholders (see `IOS_TESTFLIGHT.md`).
+- ✅ **iOS TestFlight pipeline LIVE** (2026-06-12) — first signed build built, uploaded,
+  and installed via TestFlight (Apple ID `6779779848`, API key `CodemagicAppStore`).
+  Builds are **manual** from the Codemagic UI. Signing uses a persistent RSA key in the
+  secure env var `CERTIFICATE_PRIVATE_KEY` (group `appstore_credentials`) — see
+  `IOS_TESTFLIGHT.md` step 8. Recommend enabling **Automatic Distribution** on the
+  internal tester group so future builds appear without the racy post-processing step.
 - ☐ **Gate / remove the `· dev ·` menu** before any public/production build (keep it
   for internal/testing tracks behind a flag, or strip it for production).
 - ◐ **Readability pass** — home done; finish Settings / Streak / Field Guide / in-game

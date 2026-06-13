@@ -1,12 +1,16 @@
 # Codemagic CI/CD — iOS build → sign → TestFlight, no Mac required.
 # Full setup walkthrough: see IOS_TESTFLIGHT.md
 #
-# Two placeholders you must set before the first build (both come from Apple,
-# see IOS_TESTFLIGHT.md steps 2–3):
+# Prerequisites you must set before the first build (see IOS_TESTFLIGHT.md):
 #   1. integrations.app_store_connect → the NAME you give the App Store Connect
 #      API key when you add it in Codemagic (Team settings → Integrations).
 #   2. APP_STORE_APPLE_ID → the numeric "Apple ID" on your app's App Information
 #      page in App Store Connect.
+#   3. CERTIFICATE_PRIVATE_KEY → a secure Codemagic env var (group
+#      `appstore_credentials`) holding an RSA private key. A brand-new app has no
+#      signing cert and --create cannot mint the first one without a key to base it
+#      on; we generate one (openssl genrsa) and Codemagic mints + reuses the cert
+#      from it. Status: LIVE — first signed build installed via TestFlight 2026-06-12.
 
 workflows:
   ios-testflight:
